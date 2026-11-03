@@ -15,7 +15,7 @@ from python_engine.paw import binarize, components, segment_word_image
 from python_engine.normalizer import normalize_kashmiri
 S = os.environ.get('KS_WORK', '.')
 F = os.environ.get('KS_FONTS', 'fonts')
-sess = ort.InferenceSession(os.path.join(ROOT, 'public/models/kashmiri_word_ocr_int8.onnx')
+sess = ort.InferenceSession(os.path.join(ROOT, 'public/models/kashmiri_word_ocr_int8.onnx'))
 units = json.load(open(os.path.join(ROOT, 'public/models/kashmiri_word_ocr.json'))['units']
 
 def dec(ids):
