@@ -1,0 +1,15 @@
+{
+ "id": "YOUR_KAGGLE_USERNAME/kashmiri-word-ocr",
+ "title": "Kashmiri word OCR: characters vs PAW units",
+ "code_file": "kashmiri_word_ocr.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_internet": true,
+ "dataset_sources": [
+  "nawabhussaen/kashmiri-ocr"
+ ],
+ "competition_sources": [],
+ "kernel_sources": []
+}
