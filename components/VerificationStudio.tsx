@@ -1,108 +1,68 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
-import {
-  Copy,
-  Trash2,
-  CheckCircle,
-  FileText,
-  Download,
-  ZoomIn,
-  ZoomOut,
-  SpellCheck,
-  Share2,
-} from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Copy, Trash2, ZoomIn, ZoomOut, Plus, FileSearch } from "lucide-react";
 import { DiacriticToolbar } from "./DiacriticToolbar";
 import { normalizeKashmiriUnicode } from "../lib/kashmiri-normalizer";
 import { transliterateKashmiriToRoman } from "../lib/transliteration";
-import { exportToTxt, exportToJson, exportToDocx, exportToPdf, ExportLine } from "../lib/export-utils";
+import { exportToTxt, exportToJson, exportToDocx, exportToPdf } from "../lib/export-utils";
+import type { OcrLine } from "../lib/ocr-engine";
 
-export interface LineItem extends ExportLine {
-  id: number;
-  text: string;
-  roman?: string;
-  poly: number[][]; // [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-  conf: number;
-}
+export type LineItem = OcrLine;
 
 interface VerificationStudioProps {
+  image: HTMLCanvasElement | null;
   lines: LineItem[];
+  exportLines: LineItem[];
   onLinesChange: (updated: LineItem[]) => void;
-  onSampleLoad: (type: "dictionary" | "poetry") => void;
+  docName: string;
+  engineUsed: string;
+  emptyHint: string;
 }
 
 export const VerificationStudio: React.FC<VerificationStudioProps> = ({
+  image,
   lines,
+  exportLines,
   onLinesChange,
-  onSampleLoad,
+  docName,
+  engineUsed,
+  emptyHint,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [activeLineId, setActiveLineId] = useState<number>(lines[0]?.id || 1);
-  const [scale, setScale] = useState<number>(1.0);
-  const [dictWord, setDictWord] = useState<string>("کٲشُر");
-  const [copied, setCopied] = useState<boolean>(false);
+  const inputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const [activeLineId, setActiveLineId] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [copied, setCopied] = useState(false);
 
-  // Redraw canvas whenever lines, activeLineId, or scale changes
+  // Keep the active line valid when the document changes.
+  useEffect(() => {
+    if (!lines.some((l) => l.id === activeLineId)) setActiveLineId(lines[0]?.id ?? null);
+  }, [lines, activeLineId]);
+
+  useEffect(() => setZoom(1), [image]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !image) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
-    canvas.width = 400;
-    canvas.height = 420;
-
-    // Draw document sheet
-    ctx.fillStyle = "#f8fafc";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Book spine curvature shadow gradient on left edge
-    const shadow = ctx.createLinearGradient(0, 0, 70, 0);
-    shadow.addColorStop(0, "rgba(0, 0, 0, 0.18)");
-    shadow.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = shadow;
-    ctx.fillRect(0, 0, 70, canvas.height);
-
-    // Render each polygonal baseline strip
+    canvas.width = image.width;
+    canvas.height = image.height;
+    ctx.drawImage(image, 0, 0);
+    const lw = Math.max(2, image.width / 500);
     lines.forEach((line) => {
       const isActive = line.id === activeLineId;
-      const [p1, p2, p3, p4] = line.poly;
-
       ctx.beginPath();
-      ctx.moveTo(p1[0], p1[1]);
-      ctx.lineTo(p2[0], p2[1]);
-      ctx.lineTo(p3[0], p3[1]);
-      ctx.lineTo(p4[0], p4[1]);
+      line.poly.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
       ctx.closePath();
-
-      if (isActive) {
-        ctx.fillStyle = "rgba(6, 182, 212, 0.22)";
-        ctx.fill();
-        ctx.strokeStyle = "#06b6d4";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Corner control handles
-        ctx.fillStyle = "#06b6d4";
-        [p1, p2, p3, p4].forEach((pt) => ctx.fillRect(pt[0] - 3, pt[1] - 3, 6, 6));
-      } else {
-        ctx.fillStyle = "rgba(16, 185, 129, 0.08)";
-        ctx.fill();
-        ctx.strokeStyle = "rgba(16, 185, 129, 0.6)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      // Draw Kashmiri Nastaliq script inside canvas
-      ctx.save();
-      ctx.fillStyle = "#0f172a";
-      ctx.font = 'bold 15px "Noto Nastaliq Urdu", serif';
-      ctx.textAlign = "right";
-      ctx.direction = "rtl";
-      ctx.fillText(line.text, p2[0] - 10, p2[1] + 24);
-      ctx.restore();
+      ctx.fillStyle = isActive ? "rgba(6, 182, 212, 0.22)" : "rgba(16, 185, 129, 0.08)";
+      ctx.fill();
+      ctx.strokeStyle = isActive ? "#06b6d4" : "rgba(16, 185, 129, 0.8)";
+      ctx.lineWidth = isActive ? lw * 1.5 : lw;
+      ctx.stroke();
     });
-  }, [lines, activeLineId, scale]);
+  }, [image, lines, activeLineId]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -110,267 +70,247 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-
-    for (const line of lines) {
-      const [p1, p2, , p4] = line.poly;
-      if (x >= p1[0] && x <= p2[0] && y >= p1[1] && y <= p4[1]) {
-        setActiveLineId(line.id);
-        break;
-      }
+    const hit = lines.find((l) => {
+      const xs = l.poly.map((p) => p[0]);
+      const ys = l.poly.map((p) => p[1]);
+      return x >= Math.min(...xs) && x <= Math.max(...xs) && y >= Math.min(...ys) && y <= Math.max(...ys);
+    });
+    if (hit) {
+      setActiveLineId(hit.id);
+      inputRefs.current[hit.id]?.focus();
     }
   };
 
   const updateLineText = (id: number, text: string) => {
-    const norm = normalizeKashmiriUnicode(text);
-    const updated = lines.map((l) =>
-      l.id === id ? { ...l, text: norm, roman: transliterateKashmiriToRoman(norm) } : l
-    );
-    onLinesChange(updated);
+    onLinesChange(lines.map((l) => (l.id === id ? { ...l, text, roman: transliterateKashmiriToRoman(text) } : l)));
+  };
+
+  // Normalize once editing of a line is finished, so the cursor does not jump while typing.
+  const normalizeLine = (id: number) => {
+    const line = lines.find((l) => l.id === id);
+    if (!line) return;
+    const norm = normalizeKashmiriUnicode(line.text);
+    if (norm !== line.text) updateLineText(id, norm);
   };
 
   const insertDiacriticToActive = (char: string) => {
-    const input = document.getElementById(`lineInput_${activeLineId}`) as HTMLInputElement | null;
+    if (activeLineId == null) return;
+    const input = inputRefs.current[activeLineId];
     if (!input) return;
-    const start = input.selectionStart || 0;
-    const end = input.selectionEnd || 0;
-    const val = input.value;
-    const newVal = val.substring(0, start) + char + val.substring(end);
-    input.value = newVal;
-    input.focus();
-    input.selectionStart = input.selectionEnd = start + char.length;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const newVal = input.value.slice(0, start) + char + input.value.slice(end);
     updateLineText(activeLineId, newVal);
+    requestAnimationFrame(() => {
+      input.focus();
+      input.selectionStart = input.selectionEnd = start + char.length;
+    });
   };
 
-  const deleteLine = (id: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const filtered = lines.filter((l) => l.id !== id);
-    onLinesChange(filtered);
-    if (activeLineId === id && filtered.length > 0) {
-      setActiveLineId(filtered[0].id);
-    }
+  const deleteLine = (id: number) => onLinesChange(lines.filter((l) => l.id !== id));
+
+  const addLine = () => {
+    const id = Math.max(0, ...lines.map((l) => l.id)) + 1;
+    onLinesChange([...lines, { id, text: "", roman: "", poly: [[0, 0], [0, 0], [0, 0], [0, 0]], conf: 1, page: lines[0]?.page }]);
+    setActiveLineId(id);
+    requestAnimationFrame(() => inputRefs.current[id]?.focus());
   };
 
   const handleCopy = () => {
-    const full = lines.map((l) => l.text).join("\n");
-    navigator.clipboard.writeText(full).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    const full = exportLines.map((l) => l.text).join("\n");
+    navigator.clipboard
+      .writeText(full)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => alert("Your browser blocked clipboard access. Use the .TXT export instead."));
   };
 
   const activeLine = lines.find((l) => l.id === activeLineId);
   const totalWords = lines.reduce((acc, l) => acc + l.text.trim().split(/\s+/).filter(Boolean).length, 0);
   const totalChars = lines.reduce((acc, l) => acc + l.text.length, 0);
+  const meanConf = lines.length ? lines.reduce((a, l) => a + l.conf, 0) / lines.length : 0;
+  const multiPage = new Set(exportLines.map((l) => l.page)).size > 1;
+  const nothingToExport = exportLines.length === 0;
 
   return (
     <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-      {/* LEFT COLUMN: INTERACTIVE DOCUMENT CANVAS */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
-            <h3 className="text-sm font-semibold text-white">Input Document & Polygonal Layout</h3>
+      {/* LEFT: document image with detected line boxes */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shrink-0" />
+            <h3 className="text-sm font-semibold text-white truncate">{docName || "Input document"}</h3>
           </div>
-
-          <div className="flex items-center space-x-2 text-xs">
+          <div className="flex items-center space-x-2 text-xs shrink-0">
             <button
-              onClick={() => onSampleLoad("dictionary")}
-              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-            >
-              Sample Dictionary
-            </button>
-            <button
-              onClick={() => onSampleLoad("poetry")}
-              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-            >
-              Sample Poetry
-            </button>
-            <button
-              onClick={() => setScale((s) => s * 1.15)}
-              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-              title="Zoom In"
+              onClick={() => setZoom((z) => Math.min(4, z * 1.25))}
+              disabled={!image}
+              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
+              title="Zoom in"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setScale((s) => Math.max(0.7, s * 0.85))}
-              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-              title="Zoom Out"
+              onClick={() => setZoom((z) => Math.max(1, z / 1.25))}
+              disabled={!image || zoom <= 1}
+              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
+              title="Zoom out"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Document Viewport */}
-        <div className="relative w-full aspect-[3/4] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center select-none">
-          <canvas
-            ref={canvasRef}
-            onClick={handleCanvasClick}
-            style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}
-            className="max-w-full max-h-full cursor-crosshair shadow-2xl transition-transform duration-150"
-          />
-          <div className="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur px-2.5 py-1 rounded-md text-[11px] font-mono border border-slate-700/60 text-slate-300">
-            Hover / Click polygon to synchronize line
-          </div>
+        <div className="relative w-full h-[60vh] max-h-[640px] bg-slate-950 rounded-xl overflow-auto border border-slate-800">
+          {image ? (
+            <canvas
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              style={{ width: `${zoom * 100}%` }}
+              className="block mx-auto cursor-crosshair"
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 text-slate-500">
+              <FileSearch className="w-10 h-10 mb-3" />
+              <p className="text-sm">{emptyHint}</p>
+            </div>
+          )}
         </div>
 
-        {/* Optical Normalization Status Ribbon */}
         <div className="grid grid-cols-3 gap-2 text-[11px] font-mono text-center">
-          <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
-            <span className="text-slate-500 block text-[9px]">DEWARP</span>
-            <span className="text-emerald-400">TPS Flat</span>
+          <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+            <span className="text-slate-500 block text-[9px]">IMAGE</span>
+            <span className="text-slate-200">{image ? `${image.width}×${image.height}` : "—"}</span>
           </div>
-          <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
-            <span className="text-slate-500 block text-[9px]">ILLUMINATION</span>
-            <span className="text-cyan-400">Gaussian σ=45</span>
+          <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+            <span className="text-slate-500 block text-[9px]">LINES FOUND</span>
+            <span className="text-cyan-400">{lines.length}</span>
           </div>
-          <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
-            <span className="text-slate-500 block text-[9px]">PADDING</span>
-            <span className="text-amber-400">+35% Vert</span>
+          <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+            <span className="text-slate-500 block text-[9px]">AVG CONFIDENCE</span>
+            <span className={meanConf >= 0.7 ? "text-emerald-400" : meanConf >= 0.4 ? "text-amber-400" : "text-red-400"}>
+              {lines.length ? `${Math.round(meanConf * 100)}%` : "—"}
+            </span>
           </div>
         </div>
+        {engineUsed && <p className="text-[11px] text-slate-500 px-1">Engine: {engineUsed}</p>}
       </div>
 
-      {/* RIGHT COLUMN: EDITABLE RTL UNICODE STUDIO */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
+      {/* RIGHT: editable text */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-            <h3 className="text-sm font-semibold text-white">Editable Kashmiri RTL Unicode Studio</h3>
+            <h3 className="text-sm font-semibold text-white">Editable Kashmiri Text</h3>
           </div>
-
-          {/* Export Actions */}
-          <div className="flex items-center space-x-1.5 text-xs">
+          <div className="flex items-center gap-1.5 text-xs">
             <button
               onClick={handleCopy}
-              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 transition"
+              disabled={nothingToExport}
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 disabled:opacity-40"
             >
               <Copy className="w-3.5 h-3.5" />
               {copied ? "Copied!" : "Copy"}
             </button>
+            {(
+              [
+                [".TXT", () => exportToTxt(exportLines)],
+                [".DOC", () => exportToDocx(exportLines)],
+                [".JSON", () => exportToJson(exportLines, { engine: engineUsed, source: docName })],
+              ] as const
+            ).map(([label, fn]) => (
+              <button
+                key={label}
+                onClick={fn}
+                disabled={nothingToExport}
+                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-40"
+              >
+                {label}
+              </button>
+            ))}
             <button
-              onClick={() => exportToTxt(lines)}
-              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
-            >
-              .TXT
-            </button>
-            <button
-              onClick={() => exportToDocx(lines)}
-              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
-            >
-              .DOCX
-            </button>
-            <button
-              onClick={() => exportToJson(lines)}
-              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200"
-            >
-              .JSON
-            </button>
-            <button
-              onClick={() => exportToPdf(lines)}
-              className="px-2 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-white font-semibold"
+              onClick={() => exportToPdf(exportLines)}
+              disabled={nothingToExport}
+              className="px-2 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-white font-semibold disabled:opacity-40"
             >
               PDF
             </button>
           </div>
         </div>
+        {multiPage && <p className="text-[11px] text-slate-400 -mt-1">Copy and exports include all OCR&apos;d pages ({exportLines.length} lines).</p>}
 
-        {/* 12-Key Diacritics Toolbar */}
-        <DiacriticToolbar onInsert={insertDiacriticToActive} />
+        <DiacriticToolbar onInsert={insertDiacriticToActive} disabled={activeLineId == null} />
 
-        {/* Text Lines List */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-            <span className="font-mono text-[11px]">
-              Lines: {lines.length} | Words: {totalWords} | Chars: {totalChars}
-            </span>
-            <span className="text-emerald-400 flex items-center gap-1 font-mono text-[11px]">
-              <CheckCircle className="w-3 h-3" /> Canonical NFC Enforced
-            </span>
-          </div>
-
-          <div className="min-h-[380px] max-h-[500px] overflow-y-auto space-y-2.5 p-3 bg-slate-950 border border-slate-800 rounded-xl">
-            {lines.map((line, index) => {
-              const isActive = line.id === activeLineId;
-              return (
-                <div
-                  key={line.id}
-                  onClick={() => setActiveLineId(line.id)}
-                  className={`p-2.5 rounded-xl border transition flex items-center justify-between gap-3 cursor-pointer ${
-                    isActive
-                      ? "bg-slate-900 border-cyan-500 shadow-md shadow-cyan-950"
-                      : "bg-slate-950/60 border-slate-800/80 hover:border-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center space-x-2 text-xs font-mono text-slate-500">
-                    <span
-                      className={`w-5 h-5 rounded-md flex items-center justify-center ${
-                        isActive ? "bg-cyan-500 text-slate-950 font-bold" : "bg-slate-800 text-slate-400"
-                      }`}
-                    >
-                      {index + 1}
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-bold">
-                      {Math.round(line.conf * 100)}%
-                    </span>
-                  </div>
-
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      id={`lineInput_${line.id}`}
-                      dir="rtl"
-                      lang="ks"
-                      value={line.text}
-                      onChange={(e) => updateLineText(line.id, e.target.value)}
-                      className="w-full bg-transparent text-white font-nastaliq text-base focus:outline-none focus:text-cyan-300"
-                    />
-                  </div>
-
-                  <button
-                    onClick={(e) => deleteLine(line.id, e)}
-                    className="text-slate-600 hover:text-red-400 p-1"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Live Roman Transliteration */}
-        <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">
-              Live Roman Kashmiri Transliteration
-            </span>
-            <span className="text-[10px] text-slate-500">ISO 15919 Standard</span>
-          </div>
-          <p className="text-xs text-slate-300 font-serif leading-relaxed italic">
-            &ldquo;{activeLine?.roman || transliterateKashmiriToRoman(activeLine?.text || "")}&rdquo;
-          </p>
-        </div>
-
-        {/* Dictionary Lookup Strip */}
-        <div className="p-2.5 bg-cyan-950/30 border border-cyan-800/40 rounded-xl flex items-center justify-between text-xs">
-          <div className="flex items-center space-x-2">
-            <SpellCheck className="w-4 h-4 text-cyan-400" />
-            <span className="text-cyan-200">Kaeshir Lexicon:</span>
-            <span className="font-nastaliq text-white font-bold text-sm">
-              {activeLine?.text.split(" ")[0] || "کٲشُر"}
-            </span>
-            <span className="text-slate-400 italic text-[11px]">
-              adj. Kashmiri, Perso-Arabic Nastaliq script
-            </span>
-          </div>
-          <button
-            onClick={() => alert("Querying Kaeshir Dictionary: confirmed canonical entry with citation.")}
-            className="text-cyan-400 hover:text-cyan-300 font-semibold text-[11px]"
-          >
-            Lookup →
+        <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-mono text-[11px]">
+          <span>
+            Lines: {lines.length} | Words: {totalWords} | Chars: {totalChars}
+          </span>
+          <button onClick={addLine} disabled={!image} className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 disabled:opacity-40">
+            <Plus className="w-3 h-3" /> Add line
           </button>
+        </div>
+
+        <div className="min-h-[300px] max-h-[500px] overflow-y-auto space-y-2.5 p-3 bg-slate-950 border border-slate-800 rounded-xl">
+          {lines.length === 0 && <p className="text-center text-sm text-slate-500 pt-24">Recognized text will appear here.</p>}
+          {lines.map((line, index) => {
+            const isActive = line.id === activeLineId;
+            return (
+              <div
+                key={line.id}
+                onClick={() => setActiveLineId(line.id)}
+                className={`p-2.5 rounded-xl border transition flex items-center justify-between gap-3 cursor-pointer ${
+                  isActive ? "bg-slate-900 border-cyan-500" : "bg-slate-950/60 border-slate-800/80 hover:border-slate-700"
+                }`}
+              >
+                <div className="flex items-center space-x-2 text-xs font-mono text-slate-500 shrink-0">
+                  <span
+                    className={`w-5 h-5 rounded-md flex items-center justify-center ${
+                      isActive ? "bg-cyan-500 text-slate-950 font-bold" : "bg-slate-800 text-slate-400"
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <span className={`text-[10px] font-bold ${line.conf >= 0.7 ? "text-emerald-400" : line.conf >= 0.4 ? "text-amber-400" : "text-red-400"}`}>
+                    {Math.round(line.conf * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  ref={(el) => {
+                    inputRefs.current[line.id] = el;
+                  }}
+                  dir="rtl"
+                  lang="ks"
+                  value={line.text}
+                  onFocus={() => setActiveLineId(line.id)}
+                  onChange={(e) => updateLineText(line.id, e.target.value)}
+                  onBlur={() => normalizeLine(line.id)}
+                  className="flex-1 min-w-0 bg-transparent text-white font-nastaliq text-base leading-[2.2] focus:outline-none focus:text-cyan-300"
+                />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteLine(line.id);
+                  }}
+                  aria-label={`Delete line ${index + 1}`}
+                  className="text-slate-600 hover:text-red-400 p-1 shrink-0"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl">
+          <span className="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider block mb-1">
+            Roman transliteration (selected line, approximate)
+          </span>
+          <p className="text-xs text-slate-300 font-serif leading-relaxed italic min-h-[1.25rem]">
+            {activeLine ? activeLine.roman || transliterateKashmiriToRoman(activeLine.text) : "—"}
+          </p>
         </div>
       </div>
     </section>

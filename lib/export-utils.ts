@@ -23,7 +23,7 @@ export function exportToJson(
 ): void {
   const data = {
     metadata: {
-      generator: "KoshurOCR Studio v2.0",
+      generator: "KoshurOCR Studio",
       language: "Kashmiri (ks)",
       script: "Nastaliq Perso-Arabic",
       timestamp: new Date().toISOString(),
@@ -40,11 +40,11 @@ export function exportToDocx(lines: ExportLine[], filename: string = "kashmiri_o
     .map(
       (l) => `
     <p dir="rtl" style="font-family: 'Noto Nastaliq Urdu', 'Gulmarg Nastaleeq', serif; font-size: 16pt; line-height: 2.4; text-align: right; margin: 8pt 0;">
-      ${l.text}
+      ${escapeHtml(l.text)}
     </p>
     ${
       l.roman
-        ? `<p dir="ltr" style="font-family: Arial, sans-serif; font-size: 10pt; color: #64748b; font-style: italic; margin-bottom: 12pt;">${l.roman}</p>`
+        ? `<p dir="ltr" style="font-family: Arial, sans-serif; font-size: 10pt; color: #64748b; font-style: italic; margin-bottom: 12pt;">${escapeHtml(l.roman)}</p>`
         : ""
     }
   `
@@ -74,16 +74,19 @@ export function exportToDocx(lines: ExportLine[], filename: string = "kashmiri_o
 export function exportToPdf(lines: ExportLine[]): void {
   // Open print dialog with RTL styles
   const printWindow = window.open("", "_blank");
-  if (!printWindow) return;
+  if (!printWindow) {
+    alert("Your browser blocked the print window. Allow pop-ups for this site to export a PDF.");
+    return;
+  }
 
   const contentHtml = lines
     .map(
       (l) => `
     <div style="margin-bottom: 16px;">
       <p dir="rtl" style="font-family: 'Noto Nastaliq Urdu', serif; font-size: 18px; line-height: 2.2; text-align: right; margin: 0;">
-        ${l.text}
+        ${escapeHtml(l.text)}
       </p>
-      ${l.roman ? `<p style="font-family: sans-serif; font-size: 11px; color: #666; font-style: italic; margin: 4px 0 0 0;">${l.roman}</p>` : ""}
+      ${l.roman ? `<p style="font-family: sans-serif; font-size: 11px; color: #666; font-style: italic; margin: 4px 0 0 0;">${escapeHtml(l.roman)}</p>` : ""}
     </div>
   `
     )
@@ -110,6 +113,10 @@ export function exportToPdf(lines: ExportLine[]): void {
     </html>
   `);
   printWindow.document.close();
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
 function downloadBlob(blob: Blob, filename: string): void {

@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Sliders, Camera, ArrowRightCircle } from "lucide-react";
 
 interface SynthCameraSimulatorProps {
-  onSendToStudio: (simulatedLines: string[]) => void;
+  onSendToStudio: (frame: HTMLCanvasElement) => void;
 }
 
 export const SynthCameraSimulator: React.FC<SynthCameraSimulatorProps> = ({ onSendToStudio }) => {
@@ -18,6 +18,15 @@ export const SynthCameraSimulator: React.FC<SynthCameraSimulatorProps> = ({ onSe
   const [noise, setNoise] = useState<number>(15);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [fontReady, setFontReady] = useState(false);
+
+  // Canvas text is drawn with whatever font is loaded at that moment, so wait for Nastaliq.
+  useEffect(() => {
+    document.fonts
+      .load('bold 24px "Noto Nastaliq Urdu"', "کٲشُر")
+      .catch(() => undefined)
+      .finally(() => setFontReady(true));
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -87,11 +96,16 @@ export const SynthCameraSimulator: React.FC<SynthCameraSimulatorProps> = ({ onSe
       }
       ctx.putImageData(imgData, 0, 0);
     }
-  }, [text, curve, shadow, moire, kerning, noise]);
+  }, [text, curve, shadow, moire, kerning, noise, fontReady]);
 
   const handleSend = () => {
-    const lines = text.trim().split("\n").filter(Boolean);
-    onSendToStudio(lines);
+    const src = canvasRef.current;
+    if (!src) return;
+    const copy = document.createElement("canvas");
+    copy.width = src.width;
+    copy.height = src.height;
+    copy.getContext("2d")!.drawImage(src, 0, 0);
+    onSendToStudio(copy);
   };
 
   return (
@@ -111,7 +125,7 @@ export const SynthCameraSimulator: React.FC<SynthCameraSimulatorProps> = ({ onSe
           className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 font-bold hover:brightness-110 transition flex items-center gap-2 text-xs shadow-lg shadow-cyan-500/20"
         >
           <ArrowRightCircle className="w-4 h-4" />
-          <span>Send Simulated Scan to OCR Studio</span>
+          <span>OCR this simulated frame</span>
         </button>
       </div>
 

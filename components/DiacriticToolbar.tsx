@@ -25,25 +25,28 @@ export const KASHMIRI_KEYS: DiacriticKey[] = [
 
 interface DiacriticToolbarProps {
   onInsert: (char: string) => void;
+  disabled?: boolean;
 }
 
-export const DiacriticToolbar: React.FC<DiacriticToolbarProps> = ({ onInsert }) => {
+export const DiacriticToolbar: React.FC<DiacriticToolbarProps> = ({ onInsert, disabled }) => {
   return (
     <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl">
       <div className="flex items-center justify-between mb-1.5 px-1">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
           Kashmiri Diacritic & Character Pad
         </span>
-        <span className="text-[10px] text-slate-500 font-mono">1-Click Insert at Cursor</span>
+        <span className="text-[10px] text-slate-500 font-mono">Select a line, then click to insert</span>
       </div>
       <div className="grid grid-cols-6 sm:grid-cols-12 gap-1.5 text-center font-nastaliq text-base">
         {KASHMIRI_KEYS.map((key, i) => (
           <button
             key={i}
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onInsert(key.insertChar)}
+            disabled={disabled}
             title={key.name}
-            className="p-1.5 rounded-lg bg-slate-900 hover:bg-cyan-950 text-slate-200 hover:text-cyan-300 border border-slate-800 hover:border-cyan-600 transition flex flex-col items-center justify-center active:scale-95"
+            className="p-1.5 rounded-lg bg-slate-900 hover:bg-cyan-950 text-slate-200 hover:text-cyan-300 border border-slate-800 hover:border-cyan-600 transition flex flex-col items-center justify-center active:scale-95 disabled:opacity-40"
           >
             <span className="text-base select-none leading-none">{key.char.replace("◌", "")}</span>
             <span className="text-[8px] font-mono text-slate-500 mt-1">{key.char}</span>

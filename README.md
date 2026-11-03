@@ -9,6 +9,12 @@
 > **KoshurOCR Studio v2.0** is an enterprise-grade, edge-cloud optical character recognition system and interactive verification studio specifically designed for printed Kashmiri text in the Perso-Arabic script (Nastaliq, Gulmarg Nastaleeq, Awami Nastaliq, and Afan Koshur Naksh).
 > It supports **(1) 500+ page PDF books rendered client-side at 300 DPI**, **(2) high-res image uploads**, and **(3) live smartphone camera viewfinders with real-time Laplacian blur quality gating**.
 
+> **Current status (web app):** text recognition runs in the browser with Tesseract.js and its
+> Urdu (Perso-Arabic) model. It reads Naskh-style print well; Nastaliq accuracy is limited. The
+> custom UTRNet model described below is not trained yet (`public/models/` holds a placeholder).
+> To use your own GPU model instead, deploy `python_engine/modal_app.py` and set `GPU_WORKER_URL`
+> in Vercel; the "Cloud GPU" engine button then becomes available.
+
 ---
 
 ## 1. Executive Critique: Why v1.0 Fails in Production & How v2.0 Fixes It
