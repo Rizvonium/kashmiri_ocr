@@ -58,6 +58,8 @@ export function normalizeKs(s: string): string {
     .replace(/[ﭐ-﷿ﹰ-﻾]/g, (c) => c.normalize("NFKC"))
     .replace(/ٮ۪/g, "ؠ")
     .replace(KS_MAP_RE, (c) => KS_MAP[c])
+    .replace(/(?<=[\u0620-\u06D3])[ \t]+([\u064B-\u065F\u0670])/g, "$1 ") 
+    .replace(/[ \t]{2,}/g, " ") // ...re-attach a detached vowel sign; collapse the spaces it leaves
     .replace(/([ً-ٰٟ])\1+/g, "$1")
     .normalize("NFC")
     .trim();
@@ -289,6 +291,7 @@ export interface WordResult {
 
 export interface CorrectOptions {
   autoRestore: boolean; // apply same-letter restorations automatically (off = only annotate)
+  minRestoreScore: number; // how well the dictionary spelling must fit what was read to restore it
   restoreSigns: boolean; // add vowel signs the dictionary spelling has but OCR did not read
   autoFuzzy: boolean; // allow replacing misreads, not just restoring signs
   minFuzzy: number; // similarity needed to suggest
@@ -299,12 +302,13 @@ export interface CorrectOptions {
 
 export const DEFAULT_CORRECT_OPTIONS: CorrectOptions = {
   autoRestore: true,
+  minRestoreScore: 0.85,
   restoreSigns: true,
   autoFuzzy: true,
   minFuzzy: 0.6,
-  autoFuzzyScore: 0.78,
+  autoFuzzyScore: 0.9,
   margin: 0.06,
-  maxOcrConfForFuzzy: 92,
+  maxOcrConfForFuzzy: 80,
 };
 
 export function correctWord(
@@ -326,8 +330,8 @@ export function correctWord(
     // only adds what OCR missed (never deletes a vowel sign that was read).
     if (top.entry.form === core) return { ...base, status: "ok", candidates: matches };
     const second = matches[1];
-    const clear = !second || rankScore(top) - rankScore(second) >= 0.02;
-    const ok = opts.autoRestore && clear && !top.deletesMarks && (opts.restoreSigns || bareKey(core) !== top.entry.bare);
+    const clear = !second || rankScore(top) - rankScore(second) >= 0.04;
+    const ok = opts.autoRestore && clear && !top.deletesMarks && top.score >= opts.minRestoreScore && (opts.restoreSigns || bareKey(core) !== top.entry.bare);
     return ok
       ? { ...base, text: top.entry.form, status: "restored", candidates: matches }
       : { ...base, status: "suggest", candidates: matches };

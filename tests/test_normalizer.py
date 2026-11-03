@@ -43,6 +43,6 @@ def test_deterministic_syllable_mark_ordering():
 
 
 def test_matches_dictionary_normalizer_on_shared_cases():
-    cases = {"كتاب": "کتاب", "اڈلنۆک": "اڈلنوٚک", "سۭتۍ": "سٟتۍ", "پٮ۪ٹھ": "پؠٹھ"}
+    cases = {"اَسنہ ٕ دٕہان": "اَسنہٕ دٕہان", "اَمہ ِکِس": "اَمہِ کِس", "كتاب": "کتاب", "اڈلنۆک": "اڈلنوٚک", "سۭتۍ": "سٟتۍ", "پٮ۪ٹھ": "پؠٹھ"}
     for raw, want in cases.items():
         assert normalize_kashmiri(raw) == want

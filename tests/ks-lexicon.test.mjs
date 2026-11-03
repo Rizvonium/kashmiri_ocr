@@ -14,6 +14,8 @@ test("normalizer keeps Kashmiri letters and signs, fixes Arabic-keyboard letters
   assert.equal(normalizeKs("مَنٛز"), "مَنٛز"); // U+065B kept (not turned into sukun)
   assert.equal(normalizeKs("آسمٲنۍ"), "آسمٲنۍ"); // ۍ kept (not turned into ؠ)
   assert.equal(normalizeKs("اڈلنۆک"), "اڈلنوٚک");
+  assert.equal(normalizeKs("اَسنہ ٕ دٕہان"), "اَسنہٕ دٕہان"); // detached vowel sign re-attached
+  assert.equal(normalizeKs("اَمہ ِکِس"), "اَمہِ کِس"); // ...to the word it belongs to
 });
 
 test("exact dictionary words are left alone", () => {
@@ -33,7 +35,9 @@ test("a vowel sign the OCR read is never deleted", () => {
 });
 
 test("near-ties are suggested, not applied", () => {
-  const r = correctWord(lex, "ہو", 80);
+  // two equally trusted spellings with the same letters: OCR's ہو could be either
+  const tie = new KashmiriLexicon([["ہِو", 2, "like", "", ""], ["ہۄ", 2, "he", "", ""]]);
+  const r = correctWord(tie, "ہو", 80);
   assert.equal(r.status, "suggest");
   assert.equal(r.text, "ہو");
   assert.ok(r.candidates.length >= 2);

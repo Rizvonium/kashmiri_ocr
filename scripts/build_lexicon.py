@@ -2,7 +2,7 @@
 """Build the compact OCR lexicon from the Kashmiri dictionary dataset.
 
 Usage:
-    python3 scripts/build_lexicon.py ../Kashmiri_dictionary public/lexicon/ks-lexicon.json
+    python3 scripts/build_lexicon.py ../Kashmiri_dictionary public/lexicon/ks-lexicon.json [--corpus FILE ...]
 
 Reads data/kashmiri_dictionary.jsonl and data/kashmiri_roman_pairs.tsv from the
 dictionary repository (github.com/Rizvonium/Kashmiri_dictionary) and writes every
@@ -15,15 +15,27 @@ Weights (how much we trust a spelling):
     2  word attested in AI4Bharat Aksharantar (mined from real Kashmiri text)
     1  word inside a multi-word native headword, or Grierson's 1932 spelling
     0.5 auto-transliterated / unverified headword
+Corpus words (--corpus, e.g. data/corpora/*.txt from scripts/fetch_corpora.py) add running-text
+attestation: seen >= 5 times -> 2, 2-4 times -> 1, once -> 0.5 (singletons are often typos).
+Every form also carries its corpus count, used to sample realistic words for synthetic OCR data.
 """
 import json
 import os
+import unicodedata
 import re
 import sys
 from collections import defaultdict
 
-DICT_DIR = sys.argv[1] if len(sys.argv) > 1 else "../Kashmiri_dictionary"
-OUT = sys.argv[2] if len(sys.argv) > 2 else "public/lexicon/ks-lexicon.json"
+import argparse
+from collections import Counter
+
+_ap = argparse.ArgumentParser()
+_ap.add_argument("dict_dir", nargs="?", default="../Kashmiri_dictionary")
+_ap.add_argument("out", nargs="?", default="public/lexicon/ks-lexicon.json")
+_ap.add_argument("--corpus", nargs="*", default=[])
+_ap.add_argument("--min-corpus-count", type=int, default=2, help="corpus words seen fewer times are left out")
+_args = _ap.parse_args()
+DICT_DIR, OUT = _args.dict_dir, _args.out
 sys.path.insert(0, os.path.join(DICT_DIR, "scripts"))
 from ks_normalize import normalize_ks  # noqa: E402
 
@@ -52,15 +64,19 @@ def short_gloss(entry):
     return g[:70] + ("…" if len(g) > 70 else "")
 
 
-forms = defaultdict(lambda: {"w": 0.0, "g": [], "p": set(), "v": set()})
+_adding_corpus = False
+forms = defaultdict(lambda: {"w": 0.0, "g": [], "p": set(), "v": set(), "n": 0, "dict": False})
 
 
 def add(form, weight, gloss="", pos="", val=""):
     form = normalize_ks(form)
     if not form or not ARABIC_LETTER.search(form) or len(form) > 40:
         return
+    if unicodedata.category(form[0]).startswith("M"):  # starts with a stray vowel sign: a data error
+        return
     f = forms[form]
     f["w"] = max(f["w"], weight)
+    f["dict"] = f["dict"] or not _adding_corpus
     for g in gloss.split("; ") if gloss else []:
         if g and g not in f["g"] and len(f["g"]) < 4:
             f["g"].append(g)
@@ -92,13 +108,61 @@ with open(os.path.join(DICT_DIR, "data/kashmiri_roman_pairs.tsv"), encoding="utf
             if t:
                 add(t, 2.0)
 
+import unicodedata as _ud
+
+# Running-text attestation from corpora
+corpus_counts = Counter()
+WORD = re.compile(r"[\u0620-\u065F\u0670-\u06D3\u06D5-\u06FF\u200c]+")
+for path in _args.corpus:
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            for t in WORD.findall(normalize_ks(line)):
+                t = t.strip("\u200c")
+                # a vowel sign separated from its letter by a space is a typo, not a word
+                if t and not _ud.category(t[0]).startswith("M"):
+                    corpus_counts[t] += 1
+_adding_corpus = True
+for t, c in corpus_counts.items():
+    if t in forms:
+        forms[t]["n"] = c
+        if c >= 5:
+            forms[t]["w"] = max(forms[t]["w"], 2.0)
+    elif c >= _args.min_corpus_count:
+        add(t, 2.0 if c >= 5 else 1.0)
+        if normalize_ks(t) in forms:  # add() skips non-words; do not create empty entries
+            forms[normalize_ks(t)]["n"] = c
+
+# A corpus-only spelling that differs from a dictionary spelling only by Kashmiri look-alike letters
+# or missing vowel signs (آزأدی vs آزٲدی, خوشحالی vs خۄشحٲلی) and is rarer than it in the corpora is
+# a variant, not an authority: low trust, so OCR correction still prefers the dictionary spelling.
+_LOOSE = str.maketrans({"ٲ": "ا", "أ": "ا", "إ": "ا", "آ": "ا", "ۄ": "و", "ؤ": "و", "ؠ": "ی", "ێ": "ی", "ۍ": "ی",
+                        "ئ": "ی", "ے": "ی", "ۂ": "ہ", "ۃ": "ہ", "ة": "ہ", "ں": "ن"})
+import unicodedata as _ud
+
+
+def _loose(t):
+    return _ud.normalize("NFC", "".join(c for c in _ud.normalize("NFD", t) if _ud.category(c) != "Mn")).translate(_LOOSE)
+
+
+best_dict_count = defaultdict(int)
+for k, v in forms.items():
+    if v["dict"]:
+        best_dict_count[_loose(k)] = max(best_dict_count[_loose(k)], v["n"], 1)
+demoted = 0
+for k, v in forms.items():
+    if not v["dict"] and v["n"] < best_dict_count.get(_loose(k), 0):
+        v["w"] = 0.5
+        demoted += 1
+print(f"{demoted} corpus-only spellings demoted as variants of dictionary spellings")
+
 rows = sorted(forms.items(), key=lambda kv: (-kv[1]["w"], kv[0]))
 out = {
     "version": 1,
-    "source": "github.com/Rizvonium/Kashmiri_dictionary (data/kashmiri_dictionary.jsonl + kashmiri_roman_pairs.tsv)",
-    "fields": ["form", "weight", "gloss", "pos", "valency"],
+    "source": "github.com/Rizvonium/Kashmiri_dictionary (data/kashmiri_dictionary.jsonl + kashmiri_roman_pairs.tsv)"
+              + ("; corpus counts: GAASH-Lab/Bolbosh (CC-BY-4.0), nawabhussain/Kashmiri-Language-Corpus (Apache-2.0)" if _args.corpus else ""),
+    "fields": ["form", "weight", "gloss", "pos", "valency", "corpus_count"],
     "forms": [
-        [k, v["w"], "; ".join(v["g"]), "/".join(sorted(v["p"])), "/".join(sorted(v["v"]))] for k, v in rows
+        [k, v["w"], "; ".join(v["g"]), "/".join(sorted(v["p"])), "/".join(sorted(v["v"])), v["n"]] for k, v in rows
     ],
 }
 os.makedirs(os.path.dirname(OUT), exist_ok=True)

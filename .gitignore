@@ -39,3 +39,6 @@ Thumbs.db
 
 # TypeScript build cache
 *.tsbuildinfo
+
+# Downloaded corpora (scripts/fetch_corpora.py)
+data/corpora/

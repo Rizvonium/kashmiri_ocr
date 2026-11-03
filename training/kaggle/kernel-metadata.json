@@ -1,6 +1,6 @@
 {
- "id": "YOUR_KAGGLE_USERNAME/kashmiri-word-ocr",
- "title": "Kashmiri word OCR: characters vs PAW units",
+ "id": "YOUR_KAGGLE_USERNAME/kashmiri-word-ocr-v2",
+ "title": "kashmiri-word-ocr-v2",
  "code_file": "kashmiri_word_ocr.ipynb",
  "language": "python",
  "kernel_type": "notebook",

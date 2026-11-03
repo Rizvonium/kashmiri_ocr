@@ -70,6 +70,7 @@ class KashmiriOrthographyNormalizer:
 
         # Step 6: collapse repeated identical marks, then NFC fixes the order of vowel signs
         # (Unicode canonical order; the dual-lookup validator requires NFC).
+        text = re.sub(r'(?<=[\u0620-\u06D3])[ \t]+([\u064B-\u065F\u0670])', r'\1 ', text)  # re-attach a detached sign
         text = re.sub(r'([\u064B-\u065F\u0670])\1+', r'\1', text)
         text = unicodedata.normalize('NFC', text)
 

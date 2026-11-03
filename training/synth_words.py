@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import random
 import sys
@@ -87,6 +88,7 @@ def main():
     ap.add_argument("--lexicon", default=os.path.join(ROOT, "public/lexicon/ks-lexicon.json"))
     ap.add_argument("--nastaliq-share", type=float, default=0.7, help="share of images drawn in Nastaliq fonts")
     ap.add_argument("--min-weight", type=float, default=1.0, help="skip low-trust spellings")
+    ap.add_argument("--freq-share", type=float, default=0.5, help="share of words sampled by corpus frequency")
     ap.add_argument("--seed", type=int, default=1)
     a = ap.parse_args()
     if not features.check("raqm"):
@@ -94,12 +96,16 @@ def main():
 
     rng = random.Random(a.seed)
     rows = json.load(open(a.lexicon, encoding="utf-8"))["forms"]
-    words, weights = [], []
-    for form, w, *_ in rows:
+    words, weights, freq = [], [], []
+    for form, w, *rest in rows:
         form = normalize_kashmiri(form)
         if w >= a.min_weight and form and " " not in form and len(form) <= 24:
             words.append(form)
             weights.append(w)
+            count = rest[3] if len(rest) > 3 else 0  # corpus count (lexicon v2)
+            freq.append(math.sqrt(count) if count else 0.0)
+    has_freq = any(freq)
+    print(f"{len(words)} words; {'mixing corpus frequency' if has_freq else 'no corpus counts in lexicon'}")
 
     fonts = []
     for f in sorted(os.listdir(a.fonts)):
@@ -123,7 +129,12 @@ def main():
     with open(os.path.join(a.out, "meta.jsonl"), "w", encoding="utf-8") as meta:
         i = 0
         while i < a.n:
-            word = rng.choices(words, weights)[0]
+            # Half by real-text frequency (sqrt, so common words do not swamp the rest), half by trust
+            # weight across the whole lexicon, so rare and dictionary-only words are also covered.
+            if has_freq and rng.random() < a.freq_share:
+                word = rng.choices(words, freq)[0]
+            else:
+                word = rng.choices(words, weights)[0]
             want_nastaliq = rng.random() < a.nastaliq_share
             usable = [f for f in fonts if set(word) <= f["chars"] or not f["chars"]]
             pool = [f for f in usable if f["nastaliq"] == want_nastaliq] or usable
