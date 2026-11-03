@@ -136,7 +136,16 @@ export const WordCheckPanel: React.FC<Props> = ({ line, onChange }) => {
           {word && (
             <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-2">
               <p className="text-slate-400">{STATUS[word.status].help}</p>
-              {word.text !== word.original && (
+              {word.splitFrom && (
+                <p className="text-slate-400">
+                  Split from the run-together reading{" "}
+                  <span className="font-nastaliq text-sm text-slate-200" dir="rtl">
+                    {word.splitFrom}
+                  </span>{" "}
+                  using the dictionary.
+                </p>
+              )}
+              {word.text !== word.original && !word.splitFrom && (
                 <p className="flex items-center gap-2 flex-wrap">
                   <span className="text-slate-500">OCR read:</span>
                   <span className="font-nastaliq text-sm text-slate-200" dir="rtl">

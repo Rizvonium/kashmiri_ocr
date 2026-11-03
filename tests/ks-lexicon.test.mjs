@@ -61,3 +61,15 @@ test("punctuation and spacing survive correction", () => {
   assert.match(r.text, /:/);
   assert.match(r.text, /۔$/);
 });
+
+test("Nastaliq text read without spaces is split back into dictionary words", async () => {
+  const { splitRunTogether } = await import(`${root}lib/ks-lexicon.ts`);
+  const pieces = splitRunTogether(lex, "مےٚچُھکٲشُرزَبانوپِؠٹھغُرور");
+  assert.ok(pieces, "no split");
+  for (const w of ["مےٚ", "چُھ", "کٲشُر", "غُرور"]) assert.ok(pieces.includes(w), `missing ${w}: ${pieces.join(" ")}`);
+});
+
+test("real words, short or long, are never split", async () => {
+  const { splitRunTogether } = await import(`${root}lib/ks-lexicon.ts`);
+  for (const w of ["چھَنٛڈ", "کٲشُر", "زمینَس", "انسٹیٹیوٹ", "آبادکٲری", "ایمبولینسہِ"]) assert.equal(splitRunTogether(lex, w), null, w);
+});

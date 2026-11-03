@@ -165,6 +165,7 @@ export interface LexEntry {
   bare: string;
   loose: string;
   cls: string;
+  count: number; // occurrences in the open corpora (0 when unknown)
 }
 
 export type MatchKind = "exact" | "bare" | "loose" | "fuzzy";
@@ -176,7 +177,7 @@ export interface Match {
   deletesMarks?: boolean; // using this spelling would remove a vowel sign OCR saw
 }
 
-export type LexRow = [string, number, string, string, string];
+export type LexRow = [string, number, string, string, string, number?]; // ..., corpus count
 
 export class KashmiriLexicon {
   readonly entries: LexEntry[] = [];
@@ -187,10 +188,10 @@ export class KashmiriLexicon {
   private grams = new Map<string, number[]>();
 
   constructor(rows: LexRow[], exclude?: Set<string>) {
-    for (const [form, weight, gloss, pos, valency] of rows) {
+    for (const [form, weight, gloss, pos, valency, count] of rows) {
       const f = normalizeKs(form);
       if (exclude?.has(f) || this.exact.has(f)) continue;
-      const e: LexEntry = { form: f, weight, gloss, pos, valency, bare: bareKey(f), loose: looseKey(f), cls: classKey(f) };
+      const e: LexEntry = { form: f, weight, gloss, pos, valency, bare: bareKey(f), loose: looseKey(f), cls: classKey(f), count: count ?? 0 };
       const i = this.entries.push(e) - 1;
       this.exact.set(f, i);
       push(this.byBare, e.bare, i);
@@ -202,6 +203,18 @@ export class KashmiriLexicon {
 
   get size() {
     return this.entries.length;
+  }
+
+  /** Best trusted entry with the same letters, whatever its vowel signs. */
+  getSameLetters(form: string): LexEntry | undefined {
+    const ids = this.byBare.get(bareKey(form));
+    if (!ids) return undefined;
+    let best: LexEntry | undefined;
+    for (const i of ids) {
+      const e = this.entries[i];
+      if (e.weight >= 1 && (!best || e.count > best.count)) best = e;
+    }
+    return best;
   }
 
   get(form: string): LexEntry | undefined {
@@ -287,9 +300,11 @@ export interface WordResult {
   status: WordStatus;
   candidates: Match[];
   ocrConf?: number; // 0..100 when known
+  splitFrom?: string; // the run-together word this piece was split from
 }
 
 export interface CorrectOptions {
+  splitRunTogether: boolean; // split words read without spaces back into dictionary words
   autoRestore: boolean; // apply same-letter restorations automatically (off = only annotate)
   minRestoreScore: number; // how well the dictionary spelling must fit what was read to restore it
   restoreSigns: boolean; // add vowel signs the dictionary spelling has but OCR did not read
@@ -301,6 +316,7 @@ export interface CorrectOptions {
 }
 
 export const DEFAULT_CORRECT_OPTIONS: CorrectOptions = {
+  splitRunTogether: true,
   autoRestore: true,
   minRestoreScore: 0.85,
   restoreSigns: true,
@@ -380,7 +396,19 @@ export function correctLine(
       continue;
     }
     if (p === "") continue;
-    words.push(correctWord(lex, p, wordConfs?.[w++], opts));
+    const conf = wordConfs?.[w++];
+    // Words read without spaces (Nastaliq) are split back into dictionary words first.
+    const [, pre, core, post] = EDGE_PUNCT_RE.exec(p) ?? ["", "", p, ""];
+    const pieces = opts.splitRunTogether && opts.autoRestore ? splitRunTogether(lex, core) : null;
+    if (pieces) {
+      pieces.forEach((piece, k) => {
+        const r = correctWord(lex, (k === 0 ? pre : "") + piece + (k === pieces.length - 1 ? post : ""), conf, opts);
+        words.push({ ...r, original: k === 0 ? core : "", splitFrom: core });
+        separators.push(k < pieces.length - 1 ? " " : "");
+      });
+      continue;
+    }
+    words.push(correctWord(lex, p, conf, opts));
     separators.push("");
   }
   return { words, separators, text: joinWords(words, separators), grounded: groundedShare(words) };
@@ -398,4 +426,52 @@ export function groundedShare(words: WordResult[]): number {
   const checkable = words.filter((w) => w.status !== "skip");
   if (!checkable.length) return 1;
   return checkable.filter((w) => w.status === "ok" || w.status === "restored" || w.status === "corrected").length / checkable.length;
+}
+
+
+// ---------------------------------------------------------------- splitting run-together words
+
+/**
+ * Splits text read without spaces (common in Nastaliq, where words overlap) back into words:
+ * the split whose pieces are all attested words (trust weight >= 1), preferring fewer, more common
+ * words (corpus counts). Returns null unless the whole token is covered by at least two such
+ * words, so an unknown long word or name is never cut up.
+ */
+export function splitRunTogether(lex: KashmiriLexicon, token: string, maxPiece = 18, minCoverage = 0.6): string[] | null {
+  const t = Array.from(normalizeKs(token));
+  const n = t.length;
+  const isMark = (c: string) => /[\u064B-\u065F\u0670]/.test(c);
+  // Real run-together readings are long (several words); shorter tokens are left alone.
+  if (t.filter((c) => !isMark(c)).length < 8) return null;
+  if ((lex.get(t.join(""))?.weight ?? 0) >= 1 || lex.getSameLetters(t.join(""))) return null;
+  // best[i] = best score for t[0..i). Pieces never start with a vowel sign or split one off its letter.
+  const best = new Array<number>(n + 1).fill(-Infinity);
+  const back = new Array<number>(n + 1).fill(-1);
+  const known = new Array<number>(n + 1).fill(0); // letters covered by known words
+  best[0] = 0;
+  for (let i = 1; i <= n; i++) {
+    if (i < n && isMark(t[i])) continue;
+    for (let j = Math.max(0, i - maxPiece); j < i; j++) {
+      if (best[j] === -Infinity || isMark(t[j])) continue;
+      const piece = t.slice(j, i).join("");
+      const len = i - j;
+      const letters = t.slice(j, i).filter((c) => !isMark(c)).length;
+      const exact = lex.get(piece);
+      let e = exact && exact.weight >= 1 ? exact : lex.getSameLetters(piece);
+      // single letters are not words here, and two-letter words must be very common (چُھ, مےٚ, تہٕ ...)
+      if (e && (letters < 2 || (letters === 2 && e.count < 100))) e = undefined;
+      // known word: reward common words; -6 per word prefers fewer, longer words.
+      // unknown stretch (a misread): allowed, but costs 2.5 per letter.
+      const score = e ? best[j] + Math.log(2 + e.count) + e.weight - 6 - (e === exact ? 0 : 0.5) : best[j] - 4 - 2.5 * len;
+      if (score > best[i]) {
+        best[i] = score;
+        back[i] = j;
+        known[i] = known[j] + (e ? len : 0);
+      }
+    }
+  }
+  if (best[n] === -Infinity || known[n] < minCoverage * n) return null;
+  const pieces: string[] = [];
+  for (let i = n; i > 0; i = back[i]) pieces.unshift(t.slice(back[i], i).join(""));
+  return pieces.length >= 2 ? pieces : null;
 }

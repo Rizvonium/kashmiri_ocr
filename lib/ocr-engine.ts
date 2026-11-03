@@ -12,7 +12,7 @@ import { normalizeKashmiriUnicode } from "./kashmiri-normalizer";
 import { transliterateKashmiriToRoman } from "./transliteration";
 import type { LineCorrection } from "./ks-lexicon";
 
-export type OcrEngine = "browser" | "cloud";
+export type OcrEngine = "kashmiri" | "browser" | "cloud";
 
 export interface OcrLine {
   id: number;
@@ -64,12 +64,25 @@ function meanConf(lines: OcrLine[]): number {
   return lines.length ? lines.reduce((a, l) => a + l.conf, 0) / lines.length : 0;
 }
 
-async function recognizeInBrowser(image: HTMLCanvasElement, onProgress?: ProgressFn, page?: number): Promise<OcrResult> {
+async function recognizeInBrowser(
+  image: HTMLCanvasElement,
+  onProgress?: ProgressFn,
+  page?: number,
+  useKashmiriModel = false
+): Promise<OcrResult> {
   progressListener = onProgress ?? null;
   try {
     const worker = await getWorker();
+    const modelReady = useKashmiriModel ? import("./kashmiri-model").then((m) => m.loadKashmiriModel().then(() => m)) : null;
     const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
+    const model = modelReady ? await modelReady : null;
+    progressListener = null;
     const lines: OcrLine[] = [];
+    const totalWords = (data.blocks ?? []).reduce(
+      (n, b) => n + b.paragraphs.reduce((m, p) => m + p.lines.reduce((k, l) => k + (l.words?.length ?? 0), 0), 0),
+      0
+    );
+    let done = 0;
     for (const block of data.blocks ?? []) {
       for (const para of block.paragraphs) {
         for (const line of para.lines) {
@@ -81,13 +94,34 @@ async function recognizeInBrowser(image: HTMLCanvasElement, onProgress?: Progres
             line.confidence > 0 || words.length === 0
               ? line.confidence
               : words.reduce((a, w) => a + w.confidence, 0) / words.length;
+          if (model && words.length) {
+            // Tesseract found the words; the Kashmiri model reads each one, right to left.
+            const ordered = [...words].sort((a, b) => b.bbox.x1 - a.bbox.x1);
+            const texts: string[] = [];
+            const confs: number[] = [];
+            for (const w of ordered) {
+              const r = await model.readWord(image, w.bbox).catch(() => null);
+              texts.push(r?.text || w.text);
+              confs.push(r?.text ? r.conf : w.confidence);
+              onProgress?.("reading words with the Kashmiri model", ++done / Math.max(1, totalWords));
+            }
+            const lineConf = confs.reduce((a, c) => a + c, 0) / confs.length;
+            lines.push(finishLine(texts.join(" "), [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], lineConf / 100, lines.length + 1, page, confs));
+            continue;
+          }
           lines.push(
             finishLine(line.text, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], conf / 100, lines.length + 1, page, words.map((w) => w.confidence))
           );
         }
       }
     }
-    return { lines, confidence: meanConf(lines), engine: "Tesseract.js (Urdu model, in browser)" };
+    return {
+      lines,
+      confidence: meanConf(lines),
+      engine: model
+        ? "Kashmiri word model v2 (in browser) + Tesseract for finding words"
+        : "Tesseract.js (Urdu model, in browser)",
+    };
   } finally {
     progressListener = null;
   }
@@ -121,6 +155,40 @@ async function recognizeInCloud(image: HTMLCanvasElement, onProgress?: ProgressF
   return { lines, confidence: meanConf(lines), engine: json.metadata?.engine || "Cloud GPU worker" };
 }
 
+/** Our own layout (lines from ink bands, words from gaps) + the Kashmiri word model. No Tesseract. */
+async function recognizeWithKashmiriModel(image: HTMLCanvasElement, onProgress?: ProgressFn, page?: number): Promise<OcrResult> {
+  onProgress?.("loading the Kashmiri model", 0.05);
+  const model = await import("./kashmiri-model");
+  await model.loadKashmiriModel();
+  onProgress?.("finding lines and words", 0.1);
+  const layout = model.segmentPage(image);
+  const total = layout.reduce((n, l) => n + l.words.length, 0);
+  let done = 0;
+  const lines: OcrLine[] = [];
+  for (const l of layout) {
+    const texts: string[] = [];
+    const confs: number[] = [];
+    for (const box of l.words) {
+      const r = await model.readWord(image, box, false);
+      onProgress?.("reading words with the Kashmiri model", ++done / Math.max(1, total));
+      if (r?.text) {
+        texts.push(r.text);
+        confs.push(r.conf);
+      }
+    }
+    if (!texts.length) continue;
+    const { x0, y0, x1, y1 } = l.box;
+    const lineConf = confs.reduce((a, c) => a + c, 0) / confs.length;
+    lines.push(finishLine(texts.join(" "), [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], lineConf / 100, lines.length + 1, page, confs));
+  }
+  if (typeof window !== "undefined" && (window as unknown as { __KS_DEBUG?: boolean }).__KS_DEBUG) {
+    (window as unknown as { __KS_DEBUG_OUT?: unknown }).__KS_DEBUG_OUT = { layout, size: [image.width, image.height] };
+  }
+  return { lines, confidence: meanConf(lines), engine: "Kashmiri word model v2 (in browser)" };
+}
+
 export function recognize(engine: OcrEngine, image: HTMLCanvasElement, onProgress?: ProgressFn, page?: number) {
-  return engine === "cloud" ? recognizeInCloud(image, onProgress, page) : recognizeInBrowser(image, onProgress, page);
+  if (engine === "cloud") return recognizeInCloud(image, onProgress, page);
+  if (engine === "kashmiri") return recognizeWithKashmiriModel(image, onProgress, page);
+  return recognizeInBrowser(image, onProgress, page);
 }

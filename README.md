@@ -9,11 +9,30 @@
 > **KoshurOCR Studio v2.0** is an enterprise-grade, edge-cloud optical character recognition system and interactive verification studio specifically designed for printed Kashmiri text in the Perso-Arabic script (Nastaliq, Gulmarg Nastaleeq, Awami Nastaliq, and Afan Koshur Naksh).
 > It supports **(1) 500+ page PDF books rendered client-side at 300 DPI**, **(2) high-res image uploads**, and **(3) live smartphone camera viewfinders with real-time Laplacian blur quality gating**.
 
-> **Current status (web app):** text recognition runs in the browser with Tesseract.js and its
-> Urdu (Perso-Arabic) model, followed by a **Kashmiri dictionary check** (below). It reads
-> Naskh-style print well; Nastaliq accuracy is limited. The custom UTRNet model described further
-> down is not trained yet (`public/models/` holds a placeholder). To use your own GPU model,
-> deploy `python_engine/modal_app.py` and set `GPU_WORKER_URL` in Vercel.
+> **Current status (web app):** the default engine is our own **Kashmiri word model** (CNN + BiLSTM +
+> CTC, 7.7 MB int8 ONNX, `public/models/`), running in the browser with onnxruntime-web; nothing is
+> uploaded. Lines are found from bands of ink and words from gaps; each word is cropped with a margin and
+> any ink shape touching the crop edge (a neighbour's stroke or dot) is erased before reading. Tesseract's
+> Urdu model is still available as an alternative engine.
+
+## Kashmiri word model
+
+Trained on Kaggle (`training/`, notebook `training/kaggle/`) from 69,434 labelled word images
+(Kaggle nawabhussaen/kashmiri-ocr) and 120,000 synthetic words in Nastaliq and Naskh fonts drawn from
+the dictionary and open corpora. Character units beat PAW units (2.7% vs 5.0% word errors on unseen
+words), so the app uses characters.
+
+| Test (character errors) | Tesseract (Urdu) | Kashmiri model | + dictionary |
+|---|---|---|---|
+| Naskh dictionary sample page | 19.2% | **2.3%** | 3.5% |
+| Naskh page of unseen corpus sentences | 8.7% | **0.0%** | 0.5% |
+| Nastaliq poetry page | 63.6% | 20.7% | **11.4%** |
+| Nastaliq page of unseen corpus sentences | 42.5% | 44.7% | 44.3% |
+
+All test pages are computer-rendered; accuracy on real scans and photos is not measured yet. In
+Nastaliq, words overlap so gaps cannot separate them; the model reads whole stretches without spaces
+and the dictionary splits them back into words where it can. A line-level model that outputs spaces
+itself is the planned fix.
 
 ## Dictionary-backed OCR correction
 

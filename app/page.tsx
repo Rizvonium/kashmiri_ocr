@@ -35,12 +35,15 @@ const PROGRESS_LABELS: Record<string, string> = {
   "initializing tesseract": "Starting OCR engine",
   "loading language traineddata": "Downloading Urdu/Kashmiri model (first time only)",
   "initializing api": "Preparing model",
-  "recognizing text": "Reading text",
+  "recognizing text": "Finding lines and words",
+  "reading words with the Kashmiri model": "Reading words with the Kashmiri model",
+  "loading the Kashmiri model": "Loading the Kashmiri model (7.7 MB, first time only)",
+  "finding lines and words": "Finding lines and words",
 };
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"studio" | "simulator">("studio");
-  const [engine, setEngine] = useState<OcrEngine>("browser");
+  const [engine, setEngine] = useState<OcrEngine>("kashmiri");
   const [cloudAvailable, setCloudAvailable] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>("image");
   const [prep, setPrep] = useState<PreprocessOptions>({ evenLighting: false, reduceMoire: false });
@@ -276,14 +279,23 @@ export default function Home() {
 
             <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
               <span className="text-slate-400">Engine:</span>
-              <button
-                onClick={() => setEngine("browser")}
-                className={`px-2 py-0.5 rounded font-semibold transition ${
-                  engine === "browser" ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30" : "text-slate-400 hover:text-white"
-                }`}
-              >
-                In-browser (free)
-              </button>
+              {(
+                [
+                  ["kashmiri", "Kashmiri model", "Our Kashmiri word model (7.7 MB, runs in your browser). Best on Naskh-style print; in Nastaliq some words run together."],
+                  ["browser", "Tesseract", "Tesseract's Urdu model alone (older, weaker on Kashmiri)"],
+                ] as const
+              ).map(([id, label, title]) => (
+                <button
+                  key={id}
+                  onClick={() => setEngine(id)}
+                  title={title}
+                  className={`px-2 py-0.5 rounded font-semibold transition ${
+                    engine === id ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
               <button
                 onClick={() => cloudAvailable && setEngine("cloud")}
                 disabled={!cloudAvailable}
@@ -398,7 +410,7 @@ export default function Home() {
 
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 px-4 lg:px-8 text-xs text-slate-500 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>KoshurOCR Studio • In-browser OCR uses Tesseract&apos;s Urdu model; accuracy on Nastaliq is limited.</p>
+          <p>KoshurOCR Studio • Kashmiri word model (beta) runs in your browser; nothing is uploaded.</p>
           <a href="https://github.com/Rizvonium/kashmiri_ocr" className="text-cyan-400 hover:underline">
             GitHub Repository
           </a>

@@ -95,6 +95,7 @@ class Segment:
     pixels: np.ndarray  # boolean mask, same size as the image
     bbox: tuple[int, int, int, int]  # x0, y0, x1, y1 (inclusive)
     n_marks: int  # dots / vowel signs attached
+    body_bbox: tuple[int, int, int, int] = (0, 0, 0, 0)  # the main stroke only, without dots / signs
 
 
 def binarize(gray: np.ndarray) -> np.ndarray:
@@ -198,7 +199,9 @@ def segment_word_image(gray: np.ndarray, mark_ratio: float = 0.12, upper_band: f
         mask = np.zeros(ink.shape, dtype=bool)
         mask[pts[:, 0], pts[:, 1]] = True
         ys, xs = pts[:, 0], pts[:, 1]
-        segs.append(Segment(mask, (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())), len(g) - 1))
+        body = g[0]
+        segs.append(Segment(mask, (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())), len(g) - 1,
+                            (int(body[:, 1].min()), int(body[:, 0].min()), int(body[:, 1].max()), int(body[:, 0].max()))))
     # Nastaliq reads right to left; PAWs also step down, so order by the right edge.
     segs.sort(key=lambda s: -s.bbox[2])
     return segs
