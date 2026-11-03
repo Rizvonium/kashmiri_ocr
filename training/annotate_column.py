@@ -16,7 +16,7 @@ from python_engine.normalizer import normalize_kashmiri
 S = os.environ.get('KS_WORK', '.')
 F = os.environ.get('KS_FONTS', 'fonts')
 sess = ort.InferenceSession(os.path.join(ROOT, 'public/models/kashmiri_word_ocr_int8.onnx'))
-units = json.load(open(os.path.join(ROOT, 'public/models/kashmiri_word_ocr.json'))['units']
+units = json.load(open(os.path.join(ROOT, 'public/models/kashmiri_word_ocr.json')))['units']
 
 def dec(ids):
     o, p = [], 0
@@ -65,7 +65,7 @@ def annotate(page_path, box, out_path, roman=None, n_lines=None, min_sep=None, w
     peaks.sort()
     if n_lines: peaks = sorted(sorted(peaks, key=lambda y: -sm[y])[:n_lines])
     # 3. seams: least-ink path between consecutive centres (dynamic programming, |dy| <= 1 per column)
-    cost = ink.astype(float) * 50 + 1
+    cost = ink.astype(float) * 1e5 + 1  # crossing ink is effectively forbidden
     seams = []
     for a, b in zip(peaks, peaks[1:]):
         lo, hi = a + 2, b - 1
@@ -77,7 +77,13 @@ def annotate(page_path, box, out_path, roman=None, n_lines=None, min_sep=None, w
         y = int(acc.argmin()); path = [0] * w
         for x in range(w - 1, -1, -1): path[x] = y + lo; y = back[y, x]
         sm_path = np.convolve(np.r_[[path[0]] * 4, path, [path[-1]] * 4], np.ones(9) / 9, 'valid')  # smooth: spline-like
+        # never let smoothing move the curve onto ink: fall back to the exact ink-free path there
+        for x in range(w):
+            y = int(round(sm_path[x]))
+            if ink[max(0, y - 1):y + 2, x].any():
+                sm_path[x] = path[x]
         seams.append(sm_path)
+    collisions = [int(sum(ink[int(round(s_[x])), x] for x in range(w))) for s_ in seams]
     def line_of(c):
         cy, cx = c[:, 0].mean(), int(c[:, 1].mean())
         return sum(cy > s[min(cx, w - 1)] for s in seams)
@@ -154,7 +160,7 @@ def annotate(page_path, box, out_path, roman=None, n_lines=None, min_sep=None, w
     cd.text((orig.width + 25, 27), '(shadows removed)', font=fl, fill=(0, 0, 0))
     cd.text((orig.width + heat.width + 45, 6), 'book Roman  |  model reading', font=fl, fill=(0, 0, 0))
     canvas.save(out_path)
-    return {'lines': results, 'n_seams': len(seams), 'centres': peaks}
+    return {'lines': results, 'n_seams': len(seams), 'centres': peaks, 'seam_ink_collisions': collisions}
 
 if __name__ == '__main__':
     import argparse
