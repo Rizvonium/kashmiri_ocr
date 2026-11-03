@@ -13,8 +13,13 @@ def test_canonical_glyph_mappings():
     # Kirghiz Waw to Kashmiri Waw with Ring
     assert normalizer.normalize("ۅ") == "ۄ"
     
-    # Non-standard Yeh with tail to Kashmiri Yeh (ؠ)
-    assert normalizer.normalize("ۍ") == "ؠ"
+    # Kashmiri letters are kept as they are (dictionary / dual-lookup convention)
+    assert normalizer.normalize("ۍ") == "ۍ"
+    assert normalizer.normalize("آسمٲنۍ") == "آسمٲنۍ"
+    assert normalizer.normalize("مَنٛز") == "مَنٛز"  # U+065B kept, not turned into sukun
+
+    # Arabic heh -> heh goal, as in the dictionary dataset
+    assert normalizer.normalize("ه") == "ہ"
 
 def test_positional_vowel_decomposition():
     # ۆ (U+06C6) -> وٚ (U+0648 + U+065A)
@@ -23,14 +28,21 @@ def test_positional_vowel_decomposition():
     # Final ێ (U+06CE) -> ےٚ (U+06D2 + U+065A)
     assert normalize_kashmiri("مےٚ") == "مےٚ"
     
-    # Medial ێ (U+06CE) -> یٚ (U+06CC + U+065A)
-    assert normalize_kashmiri("مێم") == "میٚم"
+    # ێ (U+06CE) is a Kashmiri letter in the dictionary convention and is kept
+    assert normalize_kashmiri("مێم") == "مێم"
 
 def test_deterministic_syllable_mark_ordering():
-    # Sukun (U+0652) must precede Fatha (U+064E)
-    # Input with Fatha then Sukun
-    raw = "ت\u064E\u0652"
-    normalized = normalize_kashmiri(raw)
-    
-    codepoints = [ord(c) for c in normalized]
-    assert codepoints == [0x062A, 0x0652, 0x064E]
+    # Vowel signs come out in Unicode canonical (NFC) order whatever order they were typed in
+    import unicodedata
+    for raw in ("ت\u064E\u0652", "ت\u0652\u064E"):
+        normalized = normalize_kashmiri(raw)
+        assert normalized == unicodedata.normalize("NFC", normalized)
+    assert normalize_kashmiri("ت\u064E\u0652") == normalize_kashmiri("ت\u0652\u064E")
+    # repeated identical marks collapse
+    assert normalize_kashmiri("ت\u064E\u064E") == "ت\u064E"
+
+
+def test_matches_dictionary_normalizer_on_shared_cases():
+    cases = {"كتاب": "کتاب", "اڈلنۆک": "اڈلنوٚک", "سۭتۍ": "سٟتۍ", "پٮ۪ٹھ": "پؠٹھ"}
+    for raw, want in cases.items():
+        assert normalize_kashmiri(raw) == want

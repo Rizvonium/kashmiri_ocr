@@ -7,7 +7,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:py": "PYTHONPATH=. pytest -v"
+    "test:py": "PYTHONPATH=. pytest -v",
+    "test:js": "node --no-warnings --test tests/ks-lexicon.test.mjs",
+    "build:lexicon": "python3 scripts/build_lexicon.py ../Kashmiri_dictionary public/lexicon/ks-lexicon.json",
+    "eval:dictionary": "node --no-warnings scripts/eval-dictionary-correction.mjs"
   },
   "repository": {
     "type": "git",

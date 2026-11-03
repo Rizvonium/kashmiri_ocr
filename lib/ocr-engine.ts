@@ -10,6 +10,7 @@
 import type { Worker as TesseractWorker } from "tesseract.js";
 import { normalizeKashmiriUnicode } from "./kashmiri-normalizer";
 import { transliterateKashmiriToRoman } from "./transliteration";
+import type { LineCorrection } from "./ks-lexicon";
 
 export type OcrEngine = "browser" | "cloud";
 
@@ -20,6 +21,9 @@ export interface OcrLine {
   poly: number[][];
   conf: number;
   page?: number;
+  ocrText?: string; // exactly as the OCR engine read it, before dictionary correction
+  wordConfs?: number[]; // per-word OCR confidence, 0..100
+  check?: LineCorrection; // dictionary check of the current text
 }
 
 export interface OcrResult {
@@ -51,9 +55,9 @@ function getWorker(): Promise<TesseractWorker> {
   return workerPromise;
 }
 
-function finishLine(text: string, poly: number[][], conf: number, id: number, page?: number): OcrLine {
+function finishLine(text: string, poly: number[][], conf: number, id: number, page?: number, wordConfs?: number[]): OcrLine {
   const norm = normalizeKashmiriUnicode(text.replace(/\s+/g, " ").trim());
-  return { id, text: norm, roman: transliterateKashmiriToRoman(norm), poly, conf, page };
+  return { id, text: norm, ocrText: norm, roman: transliterateKashmiriToRoman(norm), poly, conf, page, wordConfs };
 }
 
 function meanConf(lines: OcrLine[]): number {
@@ -77,7 +81,9 @@ async function recognizeInBrowser(image: HTMLCanvasElement, onProgress?: Progres
             line.confidence > 0 || words.length === 0
               ? line.confidence
               : words.reduce((a, w) => a + w.confidence, 0) / words.length;
-          lines.push(finishLine(line.text, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], conf / 100, lines.length + 1, page));
+          lines.push(
+            finishLine(line.text, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], conf / 100, lines.length + 1, page, words.map((w) => w.confidence))
+          );
         }
       }
     }

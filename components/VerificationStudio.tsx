@@ -7,6 +7,8 @@ import { normalizeKashmiriUnicode } from "../lib/kashmiri-normalizer";
 import { transliterateKashmiriToRoman } from "../lib/transliteration";
 import { exportToTxt, exportToJson, exportToDocx, exportToPdf } from "../lib/export-utils";
 import type { OcrLine } from "../lib/ocr-engine";
+import { WordCheckPanel } from "./WordCheckPanel";
+import { checkLine, lexiconIfLoaded, type CheckSettings } from "../lib/dictionary";
 
 export type LineItem = OcrLine;
 
@@ -15,6 +17,7 @@ interface VerificationStudioProps {
   lines: LineItem[];
   exportLines: LineItem[];
   onLinesChange: (updated: LineItem[]) => void;
+  dictSettings: CheckSettings;
   docName: string;
   engineUsed: string;
   emptyHint: string;
@@ -25,6 +28,7 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
   lines,
   exportLines,
   onLinesChange,
+  dictSettings,
   docName,
   engineUsed,
   emptyHint,
@@ -82,7 +86,8 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
   };
 
   const updateLineText = (id: number, text: string) => {
-    onLinesChange(lines.map((l) => (l.id === id ? { ...l, text, roman: transliterateKashmiriToRoman(text) } : l)));
+    // The old word check no longer matches; it is redone when editing of the line ends.
+    onLinesChange(lines.map((l) => (l.id === id ? { ...l, text, roman: transliterateKashmiriToRoman(text), check: undefined } : l)));
   };
 
   // Normalize once editing of a line is finished, so the cursor does not jump while typing.
@@ -90,7 +95,13 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
     const line = lines.find((l) => l.id === id);
     if (!line) return;
     const norm = normalizeKashmiriUnicode(line.text);
-    if (norm !== line.text) updateLineText(id, norm);
+    if (line.check && line.check.text === norm) return; // unchanged: keep the check and its OCR history
+    const lex = lexiconIfLoaded();
+    // Re-check what the person typed, but never auto-change it.
+    const check = lex ? checkLine(lex, norm, { ...dictSettings, enabled: false }) : line.check;
+    if (norm !== line.text || check !== line.check) {
+      onLinesChange(lines.map((l) => (l.id === id ? { ...l, text: norm, roman: transliterateKashmiriToRoman(norm), check } : l)));
+    }
   };
 
   const insertDiacriticToActive = (char: string) => {
@@ -130,6 +141,8 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
   const activeLine = lines.find((l) => l.id === activeLineId);
   const totalWords = lines.reduce((acc, l) => acc + l.text.trim().split(/\s+/).filter(Boolean).length, 0);
   const totalChars = lines.reduce((acc, l) => acc + l.text.length, 0);
+  const checked = lines.filter((l) => l.check);
+  const grounded = checked.length ? checked.reduce((a, l) => a + (l.check?.grounded ?? 0), 0) / checked.length : null;
   const meanConf = lines.length ? lines.reduce((a, l) => a + l.conf, 0) / lines.length : 0;
   const multiPage = new Set(exportLines.map((l) => l.page)).size > 1;
   const nothingToExport = exportLines.length === 0;
@@ -181,8 +194,10 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
 
         <div className="grid grid-cols-3 gap-2 text-[11px] font-mono text-center">
           <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-            <span className="text-slate-500 block text-[9px]">IMAGE</span>
-            <span className="text-slate-200">{image ? `${image.width}×${image.height}` : "—"}</span>
+            <span className="text-slate-500 block text-[9px]">WORDS IN DICTIONARY</span>
+            <span className={grounded == null ? "text-slate-200" : grounded >= 0.7 ? "text-emerald-400" : grounded >= 0.4 ? "text-amber-400" : "text-red-400"}>
+              {grounded == null ? "—" : `${Math.round(grounded * 100)}%`}
+            </span>
           </div>
           <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
             <span className="text-slate-500 block text-[9px]">LINES FOUND</span>
@@ -218,7 +233,26 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
               [
                 [".TXT", () => exportToTxt(exportLines)],
                 [".DOC", () => exportToDocx(exportLines)],
-                [".JSON", () => exportToJson(exportLines, { engine: engineUsed, source: docName })],
+                [
+                  ".JSON",
+                  () =>
+                    exportToJson(
+                      exportLines.map(({ id, page, text, ocrText, roman, conf, poly, check }) => ({
+                        id,
+                        page,
+                        text,
+                        ocr_text: ocrText,
+                        roman,
+                        confidence: conf,
+                        poly,
+                        words_in_dictionary: check ? Math.round(check.grounded * 100) / 100 : undefined,
+                        dictionary_fixes: check?.words
+                          .filter((w) => w.text !== w.original)
+                          .map((w) => ({ from: w.original, to: w.text, reason: w.status })),
+                      })),
+                      { engine: engineUsed, source: docName, dictionary: "github.com/Rizvonium/Kashmiri_dictionary" }
+                    ),
+                ],
               ] as const
             ).map(([label, fn]) => (
               <button
@@ -275,6 +309,9 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
                   <span className={`text-[10px] font-bold ${line.conf >= 0.7 ? "text-emerald-400" : line.conf >= 0.4 ? "text-amber-400" : "text-red-400"}`}>
                     {Math.round(line.conf * 100)}%
                   </span>
+                  {line.check && line.ocrText !== undefined && line.text !== line.ocrText && (
+                    <span title={`OCR read: ${line.ocrText}`} className="text-[10px] text-cyan-400">fixed</span>
+                  )}
                 </div>
                 <input
                   type="text"
@@ -303,6 +340,8 @@ export const VerificationStudio: React.FC<VerificationStudioProps> = ({
             );
           })}
         </div>
+
+        <WordCheckPanel line={activeLine} onChange={(l) => onLinesChange(lines.map((x) => (x.id === l.id ? { ...l, roman: transliterateKashmiriToRoman(l.text) } : x)))} />
 
         <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl">
           <span className="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider block mb-1">

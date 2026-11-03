@@ -17,7 +17,7 @@ export function exportToTxt(lines: ExportLine[], filename: string = "kashmiri_oc
 }
 
 export function exportToJson(
-  lines: ExportLine[],
+  lines: object[],
   metadata: Record<string, unknown> = {},
   filename: string = "kashmiri_ocr_export.json"
 ): void {

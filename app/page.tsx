@@ -11,6 +11,8 @@ import { SynthCameraSimulator } from "../components/SynthCameraSimulator";
 import { recognize, type OcrEngine, type OcrLine } from "../lib/ocr-engine";
 import { canvasFromFile, preprocess, renderSamplePage, type PreprocessOptions, type SampleKind } from "../lib/image-tools";
 import { openPdf, renderPdfPage } from "../lib/pdf-loader";
+import { checkLine, loadLexicon, type CheckSettings } from "../lib/dictionary";
+import { transliterateKashmiriToRoman } from "../lib/transliteration";
 
 type InputMode = "pdf" | "image" | "camera";
 
@@ -42,6 +44,7 @@ export default function Home() {
   const [cloudAvailable, setCloudAvailable] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>("image");
   const [prep, setPrep] = useState<PreprocessOptions>({ evenLighting: false, reduceMoire: false });
+  const [dict, setDict] = useState<CheckSettings>({ enabled: true, restoreSigns: true });
 
   const [pdf, setPdf] = useState<PdfState | null>(null);
   const [pdfPage, setPdfPage] = useState(1);
@@ -84,7 +87,18 @@ export default function Home() {
             setBusy({ label: labelPrefix + (PROGRESS_LABELS[status] ?? status), progress }),
           key === SINGLE ? undefined : key
         );
-        setPageLines((m) => ({ ...m, [key]: result.lines }));
+        let lines = result.lines;
+        try {
+          setBusy({ label: `${labelPrefix}Checking words against the Kashmiri dictionary`, progress: 0.95 });
+          const lex = await loadLexicon();
+          lines = lines.map((l) => {
+            const check = checkLine(lex, l.ocrText ?? l.text, dict, l.wordConfs);
+            return { ...l, text: check.text, roman: transliterateKashmiriToRoman(check.text), check };
+          });
+        } catch (e) {
+          setError(`Dictionary check unavailable: ${(e as Error).message}. Showing the raw OCR text.`);
+        }
+        setPageLines((m) => ({ ...m, [key]: lines }));
         setEngineUsed(result.engine);
         if (result.lines.length === 0) {
           setError("No text was found. Try a sharper, well-lit image with the text the right way up.");
@@ -97,7 +111,7 @@ export default function Home() {
         setBusy(null);
       }
     },
-    [engine, prep]
+    [engine, prep, dict]
   );
 
   const startSingle = (name: string) => {
@@ -305,6 +319,22 @@ export default function Home() {
                 Reduce screen moiré (photos of a monitor)
               </label>
             </section>
+            <section className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300 px-1 -mt-3">
+              <span className="text-slate-500 uppercase tracking-wider font-semibold">Kashmiri dictionary:</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={dict.enabled} onChange={(e) => setDict((d) => ({ ...d, enabled: e.target.checked }))} />
+                Fix OCR misreads using the dictionary (56,000 attested words)
+              </label>
+              <label className={`flex items-center gap-2 ${dict.enabled ? "cursor-pointer" : "opacity-40"}`}>
+                <input
+                  type="checkbox"
+                  disabled={!dict.enabled}
+                  checked={dict.restoreSigns}
+                  onChange={(e) => setDict((d) => ({ ...d, restoreSigns: e.target.checked }))}
+                />
+                Add vowel signs the OCR missed
+              </label>
+            </section>
 
             {inputMode === "camera" && <CameraViewfinder onCapture={handleCapture} onFallbackFile={handleImageFile} disabled={!!busy} />}
             {inputMode === "image" && <ImageUploader onImageSelected={handleImageFile} onSampleSelected={handleSample} disabled={!!busy} />}
@@ -347,6 +377,7 @@ export default function Home() {
               lines={currentLines}
               exportLines={allLines}
               onLinesChange={updateCurrentLines}
+              dictSettings={dict}
               docName={inputMode === "pdf" && pdf ? `${pdf.name} — page ${pdfPage}` : docName}
               engineUsed={engineUsed}
               emptyHint={

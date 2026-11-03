@@ -10,10 +10,52 @@
 > It supports **(1) 500+ page PDF books rendered client-side at 300 DPI**, **(2) high-res image uploads**, and **(3) live smartphone camera viewfinders with real-time Laplacian blur quality gating**.
 
 > **Current status (web app):** text recognition runs in the browser with Tesseract.js and its
-> Urdu (Perso-Arabic) model. It reads Naskh-style print well; Nastaliq accuracy is limited. The
-> custom UTRNet model described below is not trained yet (`public/models/` holds a placeholder).
-> To use your own GPU model instead, deploy `python_engine/modal_app.py` and set `GPU_WORKER_URL`
-> in Vercel; the "Cloud GPU" engine button then becomes available.
+> Urdu (Perso-Arabic) model, followed by a **Kashmiri dictionary check** (below). It reads
+> Naskh-style print well; Nastaliq accuracy is limited. The custom UTRNet model described further
+> down is not trained yet (`public/models/` holds a placeholder). To use your own GPU model,
+> deploy `python_engine/modal_app.py` and set `GPU_WORKER_URL` in Vercel.
+
+## Dictionary-backed OCR correction
+
+After OCR, every word is checked against **56,349 attested Kashmiri word forms** exported from the
+[Kashmiri dictionary dataset](https://github.com/Rizvonium/Kashmiri_dictionary), using the *form
+lookup* of the dual-lookup verification guide (Sheikh, 2026, sections 6.3 and 7.3), adapted to OCR:
+
+1. **Exact key**: NFC plus letter fixes (ك→ک, ي→ی, ه→ہ). Found means the word is confirmed.
+2. **Same letters**: the vowel-free skeleton, plus Kashmiri look-alikes folded (ٲ→ا, ۄ→و, ؠ/ۍ→ی…).
+   The Urdu OCR model writes ٲ as أ and drops Kashmiri vowel signs; the attested spelling that best
+   fits what was read is restored. Signs that were read are never deleted.
+3. **Fuzzy**: a character-trigram index over a key that merges letters OCR confuses (ڑ/ژ/ز/ر, ب/پ/ت/ٹ…),
+   then an OCR-aware edit distance.
+
+"Code decides, the dictionary supplies": a word is only replaced by an attested form, and only when one
+candidate clearly wins and (for misreads) the OCR itself was unsure. Otherwise the word is offered with
+suggestions or flagged unknown. In the studio, each word is colour-coded; click one to see its meaning,
+the alternatives, or to go back to exactly what the OCR read. The JSON export lists every fix
+(`from`, `to`, `reason`). Both behaviours can be switched off under "Kashmiri dictionary".
+
+**Measured effect** (`npm run eval:dictionary`, 6 pages rendered in two fonts, 117 distinct words):
+
+| Font | Word errors | Character errors | Letter-only character errors |
+|---|---|---|---|
+| Naskh | 79.2% → 61.0% | 25.6% → 18.8% | 12.8% → 8.5% |
+| Nastaliq | 109.4% → 106.7% | 53.7% → 52.9% | 44.3% → 43.4% |
+
+With a fifth of the true words removed from the dictionary, Naskh still improves (word errors 79.2% → 64.7%);
+the only changes counted as harmful there are vowel signs the dictionary adds to words the benchmark text
+leaves unmarked. On Nastaliq the raw OCR is too poor for word matching to help much: a Nastaliq-trained
+recognizer is still the main missing piece.
+
+| Command | What it does |
+|---|---|
+| `npm run build:lexicon` | Rebuild `public/lexicon/ks-lexicon.json` from a checkout of the dictionary repo next to this one |
+| `npm run test:js` | Unit tests for the corrector (`tests/ks-lexicon.test.mjs`) |
+| `npm run eval:dictionary` | The benchmark above (needs Playwright + Chromium); `-- --verbose` lists every change |
+
+The TypeScript and Python normalizers (`lib/kashmiri-normalizer.ts`, `python_engine/normalizer.py`) now use
+the dictionary's Unicode convention: ۍ and ٛ are kept as Kashmiri characters and vowel signs are in standard
+NFC order. Before, they were rewritten, so OCR output could never match dictionary spellings. The Python
+post-processor also loads the dictionary lexicon instead of an 80-word list.
 
 ---
 

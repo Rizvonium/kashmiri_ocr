@@ -29,6 +29,23 @@ DEFAULT_KASHMIRI_LEXICON = {
     "راز", "کلامَس", "نٔو", "زِندگی", "یہِ", "مکان", "سۄ", "تِم", "تُہُنٛد", "میٛون"
 }
 
+# Load the full lexicon exported from the Kashmiri dictionary dataset
+# (scripts/build_lexicon.py -> public/lexicon/ks-lexicon.json, about 56,000 attested forms).
+import json as _json
+import os as _os
+
+LEXICON_PATH = _os.environ.get(
+    "KS_LEXICON_PATH",
+    _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "public", "lexicon", "ks-lexicon.json"),
+)
+try:
+    with open(LEXICON_PATH, encoding="utf-8") as _fh:
+        for _row in _json.load(_fh)["forms"]:
+            if _row[1] >= 1:  # skip low-trust (auto-transliterated / unverified) spellings
+                DEFAULT_KASHMIRI_LEXICON.add(normalize_kashmiri(_row[0]))
+except (OSError, ValueError, KeyError):
+    pass  # fall back to the seed list above
+
 # Try loading from installed 'kashmiri' package if available
 try:
     import kashmiri
