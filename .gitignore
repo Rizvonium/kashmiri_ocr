@@ -42,3 +42,6 @@ Thumbs.db
 
 # Downloaded corpora (scripts/fetch_corpora.py)
 data/corpora/
+
+# test screenshots
+e2e-*.png
