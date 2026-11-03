@@ -5,9 +5,6 @@ export const metadata: Metadata = {
   title: "KoshurOCR Studio — Vercel Camera, PDF Book & Image-to-Unicode Kashmiri App",
   description: "Production Camera-to-Unicode OCR and Interactive Verification Studio for Printed Kashmiri Nastaliq Script.",
   manifest: "/manifest.json",
-  icons: {
-    icon: "/favicon.ico",
-  },
 };
 
 export const viewport: Viewport = {

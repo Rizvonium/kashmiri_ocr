@@ -37,7 +37,7 @@ const SAMPLE_DOCS = {
   ],
 };
 
-function formatInitialLines(rawList: typeof SAMPLE_DOCOCS.dictionary): LineItem[] {
+function formatInitialLines(rawList: typeof SAMPLE_DOCS.dictionary): LineItem[] {
   return rawList.map((item) => {
     const norm = normalizeKashmiriUnicode(item.text);
     return {
@@ -47,9 +47,6 @@ function formatInitialLines(rawList: typeof SAMPLE_DOCOCS.dictionary): LineItem[
     };
   });
 }
-
-// Temporary alias
-const SAMPLE_DOCOCS = SAMPLE_DOCS;
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"studio" | "simulator">("studio");

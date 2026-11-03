@@ -1,0 +1,6 @@
+# Not needed by the Next.js deployment on Vercel
+python_engine/
+tests/
+kashmiri_ocr_repository.zip
+koshur_vercel_ocr_studio.html
+kashmiri_camera_ocr_pipeline.md

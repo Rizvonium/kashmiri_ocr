@@ -1,6 +1,6 @@
 # KoshurOCR Studio — Production Camera, PDF Book & Image-to-Unicode Kashmiri App (v2.0)
 
-[![Next.js 15](https://img.shields.io/badge/Next.js-15.1.0-black?logo=next.js)](https://nextjs.org/)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org/)
 [![Vercel Serverless](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel)](https://vercel.com/)
 [![ONNX WebGPU](https://img.shields.io/badge/ONNX_WebGPU-INT8_Quantized-blue)](https://onnxruntime.ai/)
 [![Python Tests](https://img.shields.io/badge/Pytest-100%25_Passing-brightgreen?logo=pytest)](./tests)
