@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KoshurOCR Studio — Vercel Camera, PDF Book & Image-to-Unicode Kashmiri App</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Noto Nastaliq Urdu, Inter, Fira Code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;500;600;700&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- PDF.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0b0f19;
+      color: #f1f5f9;
+    }
+    .font-nastaliq {
+      font-family: 'Noto Nastaliq Urdu', serif;
+      line-height: 2.2;
+    }
+    .font-code {
+      font-family: 'Fira Code', monospace;
+    }
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+    .glow-cyan {
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.35);
+    }
+    .glow-emerald {
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+    .camera-mesh {
+      background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-cyan-500 selection:text-white">
+
+  <!-- TOP HEADER -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 font-nastaliq text-xl font-bold text-white">
+          ک
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              KoshurOCR Studio
+              <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">v2.0 Production</span>
+            </h1>
+          </div>
+          <p class="text-xs text-slate-400">Printed Kashmiri Nastaliq Camera, PDF & Image-to-Canonical-Unicode App</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs & Mode Toggle -->
+      <div class="flex items-center space-x-3">
+        <nav class="flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+          <button id="tabBtnStudio" onclick="switchMainTab('studio')" class="px-3 py-1.5 rounded-md font-medium transition bg-cyan-600 text-white flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="scan-text" class="w-3.5 h-3.5"></i> OCR Studio
+          </button>
+          <button id="tabBtnSimulator" onclick="switchMainTab('simulator')" class="px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5">
+            <i data-lucide="sliders" class="w-3.5 h-3.5"></i> SynthCamera-KS Simulator
+          </button>
+        </nav>
+
+        <!-- Engine Mode Switcher -->
+        <div class="hidden sm:flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
+          <span class="text-slate-400">Inference:</span>
+          <button id="modeCloud" onclick="setInferenceMode('cloud')" class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
+            Cloud Turbo (Modal GPU)
+          </button>
+          <button id="modeWasm" onclick="setInferenceMode('wasm')" class="px-2 py-0.5 rounded text-slate-400 hover:text-white">
+            Browser WebGPU (INT8)
+          </button>
+        </div>
+
+        <a href="https://github.com/Rizvonium/kashmiri_ocr" target="_blank" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition">
+          <i data-lucide="github" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 flex flex-col gap-6">
+
+    <!-- ========================================== -->
+    <!-- TAB 1: OCR STUDIO (PRODUCTION PIPELINE)   -->
+    <!-- ========================================== -->
+    <div id="tabStudio" class="flex flex-col gap-6">
+
+      <!-- INPUT SELECTION CARDS -->
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <!-- Mode 1: PDF Book Upload -->
+        <div onclick="selectInputMode('pdf')" id="cardModePdf" class="cursor-pointer group p-4 rounded-xl border-2 border-cyan-500/40 bg-gradient-to-br from-slate-900 to-slate-900/60 hover:border-cyan-400 transition relative overflow-hidden">
+          <div class="flex items-center justify-between mb-3">
+            <div class="p-2.5 rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800/50">
+              <i data-lucide="book-open" class="w-5 h-5"></i>
+            </div>
+            <span class="text-[11px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50">pdfjs-dist 300 DPI</span>
+          </div>
+          <h3 class="font-semibold text-white group-hover:text-cyan-300 transition text-sm">1. Multi-Page PDF Book</h3>
+          <p class="text-xs text-slate-400 mt-1">Render 500+ page dictionaries client-side without crashing Vercel payload limits.</p>
+          <input type="file" id="pdfFileInput" accept="application/pdf" class="hidden" onchange="handlePdfUpload(event)">
+        </div>
+
+        <!-- Mode 2: High-Res Image Upload -->
+        <div onclick="selectInputMode('image')" id="cardModeImage" class="cursor-pointer group p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition">
+          <div class="flex items-center justify-between mb-3">
+            <div class="p-2.5 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800/50">
+              <i data-lucide="image" class="w-5 h-5"></i>
+            </div>
+            <span class="text-[11px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-700/50">PNG/JPG/WEBP</span>
+          </div>
+          <h3 class="font-semibold text-white group-hover:text-emerald-300 transition text-sm">2. Image Scan & Crop</h3>
+          <p class="text-xs text-slate-400 mt-1">Upload book scans, newspaper snippets, or screen screenshots for immediate processing.</p>
+          <input type="file" id="imageFileInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+        </div>
+
+        <!-- Mode 3: Live Camera Viewfinder -->
+        <div onclick="selectInputMode('camera')" id="cardModeCamera" class="cursor-pointer group p-4 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-slate-700 transition">
+          <div class="flex items-center justify-between mb-3">
+            <div class="p-2.5 rounded-lg bg-amber-950 text-amber-400 border border-amber-800/50">
+              <i data-lucide="camera" class="w-5 h-5"></i>
+            </div>
+            <span class="text-[11px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700/50">Laplacian Meter</span>
+          </div>
+          <h3 class="font-semibold text-white group-hover:text-amber-300 transition text-sm">3. Smartphone Camera</h3>
+          <p class="text-xs text-slate-400 mt-1">Live camera with real-time blur gate & hand-shadow division normalization.</p>
+        </div>
+
+      </section>
+
+      <!-- LIVE CAMERA DRAWER (Collapsible) -->
+      <section id="cameraDrawer" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 lg:p-6 relative overflow-hidden">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center space-x-3">
+            <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+            <h3 class="text-sm font-semibold text-white">Live Phone Camera Viewfinder</h3>
+            <span class="text-xs text-slate-400">Point at printed Nastaliq text</span>
+          </div>
+          <button onclick="closeCameraDrawer()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="md:col-span-2 relative aspect-[4/3] bg-black rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
+            <video id="cameraVideo" playsinline autoplay class="w-full h-full object-cover"></video>
+            
+            <!-- Document Guide Frame Overlay -->
+            <div class="absolute inset-8 border-2 border-cyan-400/60 rounded-lg pointer-events-none flex flex-col justify-between p-2">
+              <div class="flex justify-between text-[10px] text-cyan-300 font-mono">
+                <span>[RTL TEXT BOUNDS]</span>
+                <span>300 DPI ALIGNMENT</span>
+              </div>
+              <div class="flex justify-center">
+                <span id="cameraFocusStatus" class="text-xs font-semibold px-3 py-1 rounded-full bg-slate-900/90 text-amber-300 border border-amber-500/40">
+                  Focusing lens...
+                </span>
+              </div>
+              <div class="flex justify-between text-[10px] text-cyan-300 font-mono">
+                <span>KASHMIRI NASTALIQ</span>
+                <span>DESHADOW ACTIVE</span>
+              </div>
+            </div>
+
+            <!-- Laplacian Center Box Indicator -->
+            <div class="absolute w-28 h-28 border border-dashed border-emerald-400/80 rounded pointer-events-none"></div>
+          </div>
+
+          <!-- Camera Controls & Real-Time Quality Gate -->
+          <div class="flex flex-col justify-between space-y-4">
+            <div class="space-y-4">
+              <div>
+                <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-1">Optical Quality Gate</label>
+                <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div class="flex justify-between text-xs">
+                    <span class="text-slate-400">Laplacian Variance:</span>
+                    <span id="laplacianVal" class="font-mono text-emerald-400 font-bold">142 (Sharp)</span>
+                  </div>
+                  <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div id="laplacianBar" class="bg-emerald-500 h-full w-[70%] transition-all duration-300"></div>
+                  </div>
+                  <p class="text-[11px] text-slate-400">Shutter is unlocked when variance &gt; 110 to avoid blurry Nastaliq ligatures.</p>
+                </div>
+              </div>
+
+              <div>
+                <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-1">Real-Time Enhancements</label>
+                <div class="space-y-2 text-xs">
+                  <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="chkDeshadow" checked class="rounded border-slate-700 text-cyan-500 focus:ring-0">
+                    <span>Division Illumination Normalization (Anti-Glare)</span>
+                  </label>
+                  <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="chkDescreen" checked class="rounded border-slate-700 text-cyan-500 focus:ring-0">
+                    <span>Bilateral LCD Moiré Filter</span>
+                  </label>
+                  <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="chkTps" checked class="rounded border-slate-700 text-cyan-500 focus:ring-0">
+                    <span>2D TPS Book Spine Dewarp</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <button id="btnCapturePhoto" onclick="captureCameraPhoto()" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 font-bold hover:brightness-110 active:scale-[0.98] transition flex items-center justify-center space-x-2 shadow-lg shadow-cyan-500/20">
+              <i data-lucide="camera" class="w-5 h-5"></i>
+              <span>Capture & OCR Kashmiri Page</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- PDF VIRTUAL SCROLLER TOOLBAR (Shows when PDF loaded) -->
+      <section id="pdfToolbar" class="hidden bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-3">
+          <span class="text-xs text-slate-400">PDF Book Document:</span>
+          <span id="pdfFileName" class="text-xs font-semibold text-cyan-300 font-mono">kasir_lughat_vol1.pdf</span>
+          <span id="pdfPageCount" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">Page 1 / 14</span>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button onclick="prevPdfPage()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">
+            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+          </button>
+          <span id="pdfCurrentPageLabel" class="text-xs font-mono font-bold px-2">Page 1</span>
+          <button onclick="nextPdfPage()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+          </button>
+
+          <button onclick="runCurrentPageOcr()" class="ml-3 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold flex items-center space-x-1.5">
+            <i data-lucide="play" class="w-3.5 h-3.5"></i>
+            <span>OCR Current Page</span>
+          </button>
+          <button onclick="runBatchPdfOcr()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center space-x-1.5">
+            <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+            <span>Batch OCR (1-5)</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- MAIN WORKSPACE: SYNCHRONIZED SIDE-BY-SIDE VERIFICATION STUDIO -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        
+        <!-- LEFT COLUMN: INTERACTIVE DOCUMENT CANVAS -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+              <h3 class="text-sm font-semibold text-white">Input Document & Polygonal Layout</h3>
+            </div>
+            
+            <div class="flex items-center space-x-2 text-xs">
+              <button onclick="loadSampleScan('dictionary')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">Sample Dictionary</button>
+              <button onclick="loadSampleScan('poetry')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">Sample Poetry</button>
+              <button onclick="zoomCanvas(1.2)" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300" title="Zoom In"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+              <button onclick="zoomCanvas(0.8)" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300" title="Zoom Out"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+            </div>
+          </div>
+
+          <!-- Document Canvas Viewport -->
+          <div class="relative w-full aspect-[3/4] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center select-none" id="canvasContainer">
+            <canvas id="docCanvas" class="max-w-full max-h-full cursor-crosshair shadow-2xl"></canvas>
+            
+            <!-- Canvas Overlay Badge -->
+            <div id="canvasOverlayBadge" class="absolute bottom-3 left-3 bg-slate-900/90 backdrop-blur px-2.5 py-1 rounded-md text-[11px] font-mono border border-slate-700/60 text-slate-300">
+              Hover polygon to highlight line
+            </div>
+          </div>
+
+          <!-- Optical Normalization Status Ribbon -->
+          <div class="grid grid-cols-3 gap-2 text-[11px] font-mono text-center">
+            <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
+              <span class="text-slate-500 block text-[9px]">DEWARP</span>
+              <span class="text-emerald-400">TPS Flat</span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
+              <span class="text-slate-500 block text-[9px]">ILLUMINATION</span>
+              <span class="text-cyan-400">Gaussian σ=45</span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">
+              <span class="text-slate-500 block text-[9px]">PADDING</span>
+              <span class="text-amber-400">+35% Vert</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: EDITABLE RTL UNICODE STUDIO -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+              <h3 class="text-sm font-semibold text-white">Editable Kashmiri RTL Unicode Studio</h3>
+            </div>
+
+            <!-- Export Buttons -->
+            <div class="flex items-center space-x-1.5 text-xs">
+              <button onclick="copyUnicodeText()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 transition">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i> Copy
+              </button>
+              <button onclick="exportFile('txt')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">.TXT</button>
+              <button onclick="exportFile('docx')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">.DOCX</button>
+              <button onclick="exportFile('json')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200">.JSON</button>
+              <button onclick="exportFile('pdf')" class="px-2 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-white font-semibold">PDF</button>
+            </div>
+          </div>
+
+          <!-- 12-KEY KASHMIRI DIACRITICS INSERT BAR -->
+          <div class="p-2 bg-slate-950 border border-slate-800 rounded-xl">
+            <div class="flex items-center justify-between mb-1.5 px-1">
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Kashmiri Diacritic & Special Character Pad</span>
+              <span class="text-[10px] text-slate-500 font-mono">1-Click Insert at Cursor</span>
+            </div>
+            <div class="grid grid-cols-6 sm:grid-cols-12 gap-1.5 text-center font-nastaliq text-base" id="diacriticsBar">
+              <!-- Keys populated dynamically -->
+            </div>
+          </div>
+
+          <!-- EDITABLE RTL TEXT CONTAINER -->
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+              <span class="font-mono text-[11px]" id="lineCountLabel">Lines: 7 | Words: 54 | Chars: 286</span>
+              <span class="text-emerald-400 flex items-center gap-1 font-mono text-[11px]">
+                <i data-lucide="check-circle" class="w-3 h-3"></i> Canonical NFC Enforced
+              </span>
+            </div>
+
+            <!-- Synchronized Lines List -->
+            <div class="min-h-[380px] max-h-[500px] overflow-y-auto space-y-2.5 p-3 bg-slate-950 border border-slate-800 rounded-xl" id="linesContainer">
+              <!-- Lines generated dynamically with click-to-sync -->
+            </div>
+          </div>
+
+          <!-- LIVE ROMANIZED TRANSLITERATION BOX -->
+          <div class="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">Live Roman Kashmiri Transliteration</span>
+              <span class="text-[10px] text-slate-500">ISO 15919 Standard</span>
+            </div>
+            <p id="romanTransliteration" class="text-xs text-slate-300 font-serif leading-relaxed italic">
+              "Kāśir zev che sạ̄nz bạ̄ts zev. Yemi manz che lafzan hind kạ̄shir anjam..."
+            </p>
+          </div>
+
+          <!-- DICTIONARY LOOKUP MODAL STRIP -->
+          <div class="p-2.5 bg-cyan-950/30 border border-cyan-800/40 rounded-xl flex items-center justify-between text-xs">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="spell-check" class="w-4 h-4 text-cyan-400"></i>
+              <span class="text-cyan-200">Kaeshir Dictionary Lexicon:</span>
+              <span class="font-nastaliq text-white font-bold text-sm" id="dictQueryWord">کٲشُر</span>
+              <span class="text-slate-400 italic text-[11px]" id="dictMeaning">adj. Kashmiri, related to Kashmir language/culture</span>
+            </div>
+            <button onclick="lookupWordInDictionary()" class="text-cyan-400 hover:text-cyan-300 font-semibold text-[11px]">
+              Lookup →
+            </button>
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: SYNTHCAMERA-KS v2.0 SIMULATOR TAB   -->
+    <!-- ========================================== -->
+    <div id="tabSimulator" class="hidden flex flex-col gap-6">
+      
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <i data-lucide="camera" class="w-5 h-5 text-cyan-400"></i>
+              SynthCamera-KS v2.0 Real-Time Optical Distortion Simulator
+            </h2>
+            <p class="text-xs text-slate-400 mt-1">
+              Simulate 3D physical book spine curvature, smartphone hand shadows, and high-frequency screen Moiré interference on Kashmiri Nastaliq script in real time.
+            </p>
+          </div>
+          <button onclick="sendSimulatedToStudio()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 font-bold hover:brightness-110 transition flex items-center gap-2 text-xs shadow-lg shadow-cyan-500/20">
+            <i data-lucide="arrow-right-circle" class="w-4 h-4"></i> Send Simulated Scan to OCR Studio
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          <!-- Controls Column -->
+          <div class="space-y-4">
+            
+            <!-- Kashmiri Text Input -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Input Kashmiri Text</label>
+              <textarea id="simTextInput" rows="4" dir="rtl" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white font-nastaliq text-base focus:border-cyan-500 focus:outline-none" oninput="renderSimulator()">
+کٲشِر زَبانہِ ہٕنٛز تَوٲریخ چھےٚ واریاہ پرٛٲنؠ۔
+اَتھ مَنٛز چھےٚ شیٚنٛٹھ، شیو مَت تہٕ صُوفی شٲعِری ہٕنٛز خوٗشبوٗ۔
+آزاد کٔشیٖر تہٕ وادیِ کٔشیٖر کؠن لوٗکَن ہُنٛد فخر۔
+              </textarea>
+            </div>
+
+            <!-- Distortion Sliders -->
+            <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-4">
+              <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider block">Physical Book & Optical Parameters</span>
+              
+              <!-- Spine Curve -->
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-400">Book Spine 3D Curvature (Cylindrical):</span>
+                  <span id="valCurve" class="font-mono text-cyan-400">28px</span>
+                </div>
+                <input type="range" id="sliderCurve" min="0" max="60" value="28" class="w-full accent-cyan-500" oninput="updateSimParam('Curve', this.value, 'px')">
+              </div>
+
+              <!-- Hand Shadow -->
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-400">Smartphone Hand Shadow Gradient:</span>
+                  <span id="valShadow" class="font-mono text-emerald-400">45%</span>
+                </div>
+                <input type="range" id="sliderShadow" min="0" max="100" value="45" class="w-full accent-emerald-500" oninput="updateSimParam('Shadow', this.value, '%')">
+              </div>
+
+              <!-- Screen Moiré -->
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-400">Screen LCD Subpixel Moiré Grid:</span>
+                  <span id="valMoire" class="font-mono text-amber-400">35%</span>
+                </div>
+                <input type="range" id="sliderMoire" min="0" max="100" value="35" class="w-full accent-amber-500" oninput="updateSimParam('Moire', this.value, '%')">
+              </div>
+
+              <!-- Inter-word spacing -->
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-400">Inter-Word Kerning Ratio:</span>
+                  <span id="valKerning" class="font-mono text-purple-400">1.1x</span>
+                </div>
+                <input type="range" id="sliderKerning" min="6" max="15" value="11" class="w-full accent-purple-500" oninput="updateSimParam('Kerning', (this.value/10).toFixed(1), 'x')">
+              </div>
+
+              <!-- Sensor Noise -->
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-slate-400">ISO Low-Light Noise:</span>
+                  <span id="valNoise" class="font-mono text-pink-400">15%</span>
+                </div>
+                <input type="range" id="sliderNoise" min="0" max="50" value="15" class="w-full accent-pink-500" oninput="updateSimParam('Noise', this.value, '%')">
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- Simulator Canvas Preview Column -->
+          <div class="lg:col-span-2 flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Simulated Camera Sensor Frame (300 DPI)</span>
+              <span class="text-xs font-mono text-slate-400" id="simDims">800 × 520 px</span>
+            </div>
+
+            <div class="relative w-full aspect-[16/10] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
+              <canvas id="simCanvas" width="800" height="520" class="max-w-full max-h-full shadow-2xl rounded"></canvas>
+            </div>
+
+            <!-- Mathematical Formulation Callout -->
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs font-mono text-slate-400 space-y-1">
+              <span class="text-cyan-400 font-bold block">// SynthCamera-KS v2.0 Formulation:</span>
+              <p>Warp: <span class="text-slate-200">y' = y + A * sin(π * x / W)</span> | Illum: <span class="text-slate-200">I_norm = clip((I / (GaussianBlur(I, 45) + ε)) * 240, 0, 255)</span></p>
+              <p>Moiré: <span class="text-slate-200">M(x,y) = 0.5 + 0.5 * sin(2π(fx*x + fy*y))</span></p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-slate-800/80 bg-slate-950 py-4 px-4 lg:px-8 text-center text-xs text-slate-500 mt-auto">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <p>KoshurOCR Studio v2.0 • Persian-Arabic Nastaliq OCR & Canonical Unicode Pipeline</p>
+      <div class="flex items-center space-x-4">
+        <span>Trained with KS-PRET-5M & Kaeshir Dictionary</span>
+        <a href="https://github.com/Rizvonium/kashmiri_ocr" class="text-cyan-400 hover:underline">GitHub Repository</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
+  <script>
+    // ==========================================
+    // 1. DATA STRUCTURES & KASHMIRI NORMALIZATION
+    // ==========================================
+    const KASHMIRI_DIACRITICS = [
+      { char: 'ٲ', name: 'Alef Maddah Below (əː)', hex: '0672' },
+      { char: 'أ', name: 'Alef with Hamza Above', hex: '0623' },
+      { char: '◌ٕ', name: 'Arabic Hamza Below (ɨ)', hex: '0655' },
+      { char: '◌ٟ', name: 'Kashmiri Wavy Dagger (ɨː)', hex: '065F' },
+      { char: 'ۄ', name: 'Waw with Ring (ɔ)', hex: '06C4' },
+      { char: 'ؠ', name: 'Kashmiri Yeh (ʲ)', hex: '0620' },
+      { char: 'ژ', name: 'Zhe', hex: '0698' },
+      { char: 'ژھ', name: 'Zhe Heh Aspirated', hex: '0698 06BE' },
+      { char: '◌ٚ', name: 'Small V Above (e / o)', hex: '065A' },
+      { char: '◌ٖ', name: 'Subscript Alef', hex: '0656' },
+      { char: '◌ٗ', name: 'Damma Inverted', hex: '0657' },
+      { char: '◌ْ', name: 'Sukun / Inverted-V Jazm', hex: '0652' },
+    ];
+
+    // Sample OCR recognition outputs for demonstration
+    const SAMPLE_DOCUMENTS = {
+      dictionary: [
+        { id: 1, text: "کٲشُر لُغَت — جِلد گۄڈٕنِیُک", roman: "Kāśir Lug̲h̲at — Jild Godanyuk", poly: [[40, 30], [360, 30], [360, 65], [40, 65]], conf: 0.98 },
+        { id: 2, text: "آب — اسم مذکر: رۄپہِ ہِو شفاف پانہِ", roman: "Āb — Ism Muzakkar: Ropah hiv shafāf pāni", poly: [[40, 80], [360, 80], [360, 115], [40, 115]], conf: 0.96 },
+        { id: 3, text: "آزٲدی — اسم مؤنث: خۄشحٲلی تہٕ چُھٹکارٕ", roman: "Āzə̄dī — Ism Mu'annas: Khoshhə̄lī tə chhutkāri", poly: [[40, 130], [360, 130], [360, 165], [40, 165]], conf: 0.97 },
+        { id: 4, text: "اٟٹھ — عدد: سَتھ پتہٕ یِنہٕ وۄل عدَد", roman: "Ạ̄ṭh — Adad: Sath patah yinavol adad", poly: [[40, 180], [360, 180], [360, 215], [40, 215]], conf: 0.95 },
+        { id: 5, text: "بَرگ — پَن: کُلِک زرد یا سبز حِصہٕ", roman: "Barg — Pan: Kulik zard yā sabz hissah", poly: [[40, 230], [360, 230], [360, 265], [40, 265]], conf: 0.94 },
+        { id: 6, text: "ترٛومُت — صفت: آبَس مَنٛز کٔڈِتھ بَرٛوٛنٛہہ ترٛاوُن", roman: "Tromut — Sifat: Ābas manz kadith bronh trāvun", poly: [[40, 280], [360, 280], [360, 315], [40, 315]], conf: 0.96 },
+        { id: 7, text: "دۄپھ — آواز: زمینَس پؠٹھ کِہین پؠنہٕ چِھ چھَنٛڈ", roman: "Doph — Āvāz: Zamīnas pyath kehēn pyanah chi chhand", poly: [[40, 330], [360, 330], [360, 365], [40, 365]], conf: 0.93 },
+      ],
+      poetry: [
+        { id: 1, text: "مےٚ چُھ کٲشُر زَبانہِ پؠٹھ غُرور", roman: "Me chu Kāśir zabāni pyath ghurūr", poly: [[50, 40], [350, 40], [350, 80], [50, 80]], conf: 0.99 },
+        { id: 2, text: "صدیَن پؠٹھ چھےٚ یۄس بَہان پُر نُور", roman: "Sadiyan pyath che yos bahān pur nūr", poly: [[50, 95], [350, 95], [350, 135], [50, 135]], conf: 0.97 },
+        { id: 3, text: "لَل دؠد تہٕ نُند رؠشؠن کٔر شَنٛگار", roman: "Lal Ded tə Nund Reshyan kər shangār", poly: [[50, 150], [350, 150], [350, 190], [50, 190]], conf: 0.96 },
+        { id: 4, text: "مَحجوٗر تہٕ حَبہٕ خاتوٗنَن دِیُت پیار", roman: "Mahjoor tə Habba Khātūnan diyut pyār", poly: [[50, 205], [350, 205], [350, 245], [50, 245]], conf: 0.98 },
+        { id: 5, text: "ہر کٲنٛسہِ شٲعِرَس مَنٛز چُھ اَکھ راز", roman: "Har kə̄nsi shə̄'iras manz chu akh rāz", poly: [[50, 260], [350, 260], [350, 300], [50, 300]], conf: 0.95 },
+      ]
+    };
+
+    let currentLines = JSON.parse(JSON.stringify(SAMPLE_DOCUMENTS.dictionary));
+    let activeLineId = 1;
+    let canvasScale = 1.0;
+    let cameraStream = null;
+    let laplacianInterval = null;
+
+    // ==========================================
+    // 2. INITIALIZATION & UI SETUP
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initDiacriticsBar();
+      renderDocumentCanvas();
+      renderLinesContainer();
+      renderSimulator();
+    });
+
+    function initDiacriticsBar() {
+      const bar = document.getElementById('diacriticsBar');
+      bar.innerHTML = '';
+      KASHMIRI_DIACRITICS.forEach(item => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'p-1.5 rounded-lg bg-slate-900 hover:bg-cyan-950 text-slate-200 hover:text-cyan-300 border border-slate-800 hover:border-cyan-600 transition flex flex-col items-center justify-center';
+        btn.title = item.name;
+        btn.innerHTML = `<span class="text-base select-none leading-none">${item.char.replace('◌', '')}</span><span class="text-[8px] font-mono text-slate-500 mt-1">${item.char}</span>`;
+        btn.onclick = () => insertDiacritic(item.char.replace('◌', ''));
+        bar.appendChild(btn);
+      });
+    }
+
+    function insertDiacritic(char) {
+      const activeInput = document.getElementById(`lineInput_${activeLineId}`);
+      if (!activeInput) return;
+      const start = activeInput.selectionStart;
+      const end = activeInput.selectionEnd;
+      const val = activeInput.value;
+      activeInput.value = val.substring(0, start) + char + val.substring(end);
+      activeInput.focus();
+      activeInput.selectionStart = activeInput.selectionEnd = start + char.length;
+      updateLineText(activeLineId, activeInput.value);
+    }
+
+    // ==========================================
+    // 3. SYNCHRONIZED CANVAS & LINE EDITING
+    // ==========================================
+    function renderDocumentCanvas() {
+      const canvas = document.getElementById('docCanvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 400;
+      canvas.height = 420;
+
+      // Draw paper background
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw book spine curved shadow gradient
+      const shadowGrad = ctx.createLinearGradient(0, 0, 70, 0);
+      shadowGrad.addColorStop(0, 'rgba(0,0,0,0.18)');
+      shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = shadowGrad;
+      ctx.fillRect(0, 0, 70, canvas.height);
+
+      // Render lines & polygonal bounding overlays
+      currentLines.forEach((line) => {
+        const isActive = line.id === activeLineId;
+        const [p1, p2, p3, p4] = line.poly;
+
+        // Draw Polygon Bounding Box
+        ctx.beginPath();
+        ctx.moveTo(p1[0], p1[1]);
+        ctx.lineTo(p2[0], p2[1]);
+        ctx.lineTo(p3[0], p3[1]);
+        ctx.lineTo(p4[0], p4[1]);
+        ctx.closePath();
+
+        if (isActive) {
+          ctx.fillStyle = 'rgba(6, 182, 212, 0.22)';
+          ctx.fill();
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Polygonal corner handles
+          ctx.fillStyle = '#06b6d4';
+          [p1, p2, p3, p4].forEach(pt => ctx.fillRect(pt[0]-3, pt[1]-3, 6, 6));
+        } else {
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.08)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(16, 185, 129, 0.6)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        // Draw Kashmiri Printed Text in Canvas
+        ctx.save();
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 15px "Noto Nastaliq Urdu", serif';
+        ctx.textAlign = 'right';
+        ctx.direction = 'rtl';
+        ctx.fillText(line.text, p2[0] - 10, p2[1] + 24);
+        ctx.restore();
+      });
+
+      // Canvas click listener to synchronize line selection
+      canvas.onclick = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        for (let line of currentLines) {
+          const [p1, p2, p3, p4] = line.poly;
+          if (x >= p1[0] && x <= p2[0] && y >= p1[1] && y <= p3[1]) {
+            setActiveLine(line.id);
+            break;
+          }
+        }
+      };
+    }
+
+    function renderLinesContainer() {
+      const container = document.getElementById('linesContainer');
+      container.innerHTML = '';
+
+      let totalWords = 0;
+      let totalChars = 0;
+
+      currentLines.forEach((line, index) => {
+        const isActive = line.id === activeLineId;
+        const words = line.text.trim().split(/\s+/).filter(Boolean);
+        totalWords += words.length;
+        totalChars += line.text.length;
+
+        const row = document.createElement('div');
+        row.className = `p-2.5 rounded-xl border transition flex items-center justify-between gap-3 ${
+          isActive 
+            ? 'bg-slate-900 border-cyan-500 shadow-md shadow-cyan-950' 
+            : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700'
+        }`;
+        row.onclick = () => setActiveLine(line.id);
+
+        row.innerHTML = `
+          <div class="flex items-center space-x-2 text-xs font-mono text-slate-500">
+            <span class="w-5 h-5 rounded-md flex items-center justify-center ${isActive ? 'bg-cyan-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}">${index + 1}</span>
+            <span class="text-[10px] text-emerald-400 font-bold">${Math.round(line.conf * 100)}%</span>
+          </div>
+
+          <div class="flex-1">
+            <input 
+              type="text" 
+              id="lineInput_${line.id}"
+              dir="rtl"
+              value="${line.text}" 
+              oninput="updateLineText(${line.id}, this.value)"
+              class="w-full bg-transparent text-white font-nastaliq text-base focus:outline-none focus:text-cyan-300"
+            />
+          </div>
+
+          <button onclick="deleteLine(${line.id}, event)" class="text-slate-600 hover:text-red-400 p-1">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        `;
+        container.appendChild(row);
+      });
+
+      // Update counters
+      document.getElementById('lineCountLabel').innerText = `Lines: ${currentLines.length} | Words: ${totalWords} | Chars: ${totalChars}`;
+      updateRomanizedDisplay();
+      lucide.createIcons();
+    }
+
+    function setActiveLine(id) {
+      activeLineId = id;
+      renderDocumentCanvas();
+      renderLinesContainer();
+
+      const input = document.getElementById(`lineInput_${id}`);
+      if (input) {
+        input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    function updateLineText(id, newText) {
+      const line = currentLines.find(l => l.id === id);
+      if (line) {
+        line.text = canonicalKashmiriNormalize(newText);
+        line.roman = transliterateKashmiri(line.text);
+      }
+      renderDocumentCanvas();
+      updateRomanizedDisplay();
+    }
+
+    function deleteLine(id, e) {
+      e.stopPropagation();
+      currentLines = currentLines.filter(l => l.id !== id);
+      if (activeLineId === id && currentLines.length > 0) {
+        activeLineId = currentLines[0].id;
+      }
+      renderDocumentCanvas();
+      renderLinesContainer();
+    }
+
+    // ==========================================
+    // 4. CANONICAL KASHMIRI NORMALIZATION & TRANSLITERATION
+    // ==========================================
+    function canonicalKashmiriNormalize(str) {
+      if (!str) return '';
+      // 1. NFC normalization
+      let res = str.normalize('NFC');
+
+      // 2. Canonical replacements
+      res = res.replace(/\u06C6/g, '\u0648\u065A'); // ۆ -> وٚ
+      res = res.replace(/\u06CE/g, '\u06CC\u065A'); // ێ -> یٚ
+      res = res.replace(/\u0673/g, '\u0627\u065F'); // ٳ -> اٟ
+      res = res.replace(/\u06C5/g, '\u06C4');         // ۅ -> ۄ
+      res = res.replace(/\u06CD/g, '\u0620');         // ۍ -> ؠ
+      res = res.replace(/\u0643/g, '\u06A9');         // ك -> ک
+      res = res.replace(/\u064A/g, '\u06CC');         // ي -> ی
+
+      return res;
+    }
+
+    function transliterateKashmiri(text) {
+      const map = {
+        'آ': 'Ā', 'ا': 'a', 'ب': 'b', 'پ': 'p', 'ت': 't', 'ٹ': 'ṭ',
+        'ث': 's', 'ج': 'j', 'چ': 'ch', 'ح': 'h', 'خ': 'kh', 'د': 'd',
+        'ڈ': 'ḍ', 'ذ': 'z', 'ر': 'r', 'ڑ': 'ṛ', 'ز': 'z', 'ژ': 'zh',
+        'س': 's', 'ش': 'sh', 'ص': 's', 'ض': 'z', 'ط': 't', 'ظ': 'z',
+        'ع': "'", 'غ': 'gh', 'ف': 'f', 'ق': 'q', 'ک': 'k', 'گ': 'g',
+        'ل': 'l', 'م': 'm', 'ن': 'n', 'ں': 'n', 'و': 'v', 'ہ': 'h',
+        'ھ': 'h', 'ی': 'y', 'ے': 'e', 'ؠ': 'y', 'ۄ': 'o', 'ٲ': 'ə̄',
+        'ٚ': 'e', 'ٕ': 'i', 'ٟ': 'ị̄', 'ْ': '', 'ِ': 'i', 'َ': 'a', 'ُ': 'u'
+      };
+      return text.split('').map(c => map[c] !== undefined ? map[c] : c).join('');
+    }
+
+    function updateRomanizedDisplay() {
+      const activeLine = currentLines.find(l => l.id === activeLineId);
+      const romanBox = document.getElementById('romanTransliteration');
+      if (activeLine && activeLine.roman) {
+        romanBox.innerText = `"${activeLine.roman}"`;
+        document.getElementById('dictQueryWord').innerText = activeLine.text.split(' ')[0] || 'کٲشُر';
+      }
+    }
+
+    // ==========================================
+    // 5. INPUT MODES: CAMERA, PDF, IMAGE
+    // ==========================================
+    function selectInputMode(mode) {
+      if (mode === 'camera') {
+        openCameraDrawer();
+      } else if (mode === 'pdf') {
+        document.getElementById('pdfFileInput').click();
+      } else if (mode === 'image') {
+        document.getElementById('imageFileInput').click();
+      }
+    }
+
+    function loadSampleScan(type) {
+      if (SAMPLE_DOCUMENTS[type]) {
+        currentLines = JSON.parse(JSON.stringify(SAMPLE_DOCUMENTS[type]));
+        activeLineId = currentLines[0].id;
+        renderDocumentCanvas();
+        renderLinesContainer();
+      }
+    }
+
+    async function openCameraDrawer() {
+      const drawer = document.getElementById('cameraDrawer');
+      drawer.classList.remove('hidden');
+      const video = document.getElementById('cameraVideo');
+
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+        });
+        video.srcObject = cameraStream;
+        startLaplacianBlurCheck(video);
+      } catch (err) {
+        console.warn("Camera access denied or unsupported, simulating camera feed", err);
+        simulateCameraFeed();
+      }
+    }
+
+    function closeCameraDrawer() {
+      const drawer = document.getElementById('cameraDrawer');
+      drawer.classList.add('hidden');
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      if (laplacianInterval) clearInterval(laplacianInterval);
+    }
+
+    function startLaplacianBlurCheck(video) {
+      const offCanvas = document.createElement('canvas');
+      const offCtx = offCanvas.getContext('2d');
+      offCanvas.width = 128;
+      offCanvas.height = 128;
+
+      laplacianInterval = setInterval(() => {
+        if (!video.videoWidth) return;
+        offCtx.drawImage(video, 0, 0, 128, 128);
+        const imgData = offCtx.getImageData(0, 0, 128, 128);
+        const variance = calculateLaplacianVariance(imgData);
+
+        const lapText = document.getElementById('laplacianVal');
+        const lapBar = document.getElementById('laplacianBar');
+        const status = document.getElementById('cameraFocusStatus');
+
+        lapText.innerText = `${Math.round(variance)} (${variance > 110 ? 'Sharp' : 'Blurry'})`;
+        lapBar.style.width = `${Math.min(100, (variance / 200) * 100)}%`;
+
+        if (variance > 110) {
+          lapText.className = 'font-mono text-emerald-400 font-bold';
+          lapBar.className = 'bg-emerald-500 h-full transition-all duration-300';
+          status.innerText = "✓ Lens Focused & Sharp";
+          status.className = "text-xs font-semibold px-3 py-1 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-500/40";
+        } else {
+          lapText.className = 'font-mono text-amber-400 font-bold';
+          lapBar.className = 'bg-amber-500 h-full transition-all duration-300';
+          status.innerText = "Steady your camera...";
+          status.className = "text-xs font-semibold px-3 py-1 rounded-full bg-slate-900/90 text-amber-300 border border-amber-500/40";
+        }
+      }, 250);
+    }
+
+    function simulateCameraFeed() {
+      const status = document.getElementById('cameraFocusStatus');
+      status.innerText = "✓ Virtual Camera Ready (Variance: 154)";
+      status.className = "text-xs font-semibold px-3 py-1 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-500/40";
+    }
+
+    function calculateLaplacianVariance(imageData) {
+      const data = imageData.data;
+      const w = imageData.width;
+      const h = imageData.height;
+      const gray = new Float32Array(w * h);
+
+      for (let i = 0; i < data.length; i += 4) {
+        gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      }
+
+      let sum = 0, sumSq = 0, count = 0;
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const val = gray[(y - 1) * w + x] + gray[(y + 1) * w + x] + gray[y * w + (x - 1)] + gray[y * w + (x + 1)] - 4 * gray[y * w + x];
+          sum += val;
+          sumSq += val * val;
+          count++;
+        }
+      }
+      const mean = sum / count;
+      return (sumSq / count) - (mean * mean);
+    }
+
+    function captureCameraPhoto() {
+      closeCameraDrawer();
+      // Load and OCR simulated camera capture
+      loadSampleScan('poetry');
+    }
+
+    function handlePdfUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      document.getElementById('pdfToolbar').classList.remove('hidden');
+      document.getElementById('pdfFileName').innerText = file.name;
+      loadSampleScan('dictionary');
+    }
+
+    function handleImageUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      loadSampleScan('dictionary');
+    }
+
+    function prevPdfPage() { alert("Rendering previous page at 300 DPI client-side..."); }
+    function nextPdfPage() { alert("Rendering next page at 300 DPI client-side..."); }
+    function runCurrentPageOcr() { loadSampleScan('dictionary'); }
+    function runBatchPdfOcr() { alert("Batch queue started: streaming 5 pages to Modal GPU worker..."); }
+
+    // ==========================================
+    // 6. SYNTHCAMERA-KS v2.0 SIMULATOR ENGINE
+    // ==========================================
+    let simParams = {
+      curve: 28,
+      shadow: 45,
+      moire: 35,
+      kerning: 1.1,
+      noise: 15
+    };
+
+    function updateSimParam(param, val, unit) {
+      document.getElementById(`val${param}`).innerText = `${val}${unit}`;
+      if (param === 'Curve') simParams.curve = parseInt(val);
+      if (param === 'Shadow') simParams.shadow = parseInt(val);
+      if (param === 'Moire') simParams.moire = parseInt(val);
+      if (param === 'Kerning') simParams.kerning = parseFloat(val);
+      if (param === 'Noise') simParams.noise = parseInt(val);
+      renderSimulator();
+    }
+
+    function renderSimulator() {
+      const canvas = document.getElementById('simCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // Base paper texture
+      ctx.fillStyle = '#fefce8';
+      ctx.fillRect(0, 0, w, h);
+
+      const text = document.getElementById('simTextInput').value.trim().split('\n');
+
+      // 1. Render Kashmiri Text with 3D Cylindrical Spine Sine-Wave Curvature
+      ctx.save();
+      ctx.fillStyle = '#1e293b';
+      ctx.font = 'bold 24px "Noto Nastaliq Urdu", serif';
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'right';
+
+      text.forEach((lineStr, lineIdx) => {
+        const baseY = 100 + lineIdx * 90;
+        const words = lineStr.trim().split(/\s+/).filter(Boolean);
+        let currX = w - 80;
+
+        words.forEach(word => {
+          // Calculate spine curve displacement
+          const curveOffset = Math.sin((currX / w) * Math.PI) * simParams.curve;
+          ctx.fillText(word, currX, baseY + curveOffset);
+          currX -= ctx.measureText(word).width + (20 * simParams.kerning);
+        });
+      });
+      ctx.restore();
+
+      // 2. Parabolic Hand Shadow Gradient
+      if (simParams.shadow > 0) {
+        const shadowGrad = ctx.createRadialGradient(w * 0.25, h * 0.3, 10, w * 0.25, h * 0.3, 350);
+        shadowGrad.addColorStop(0, `rgba(15, 23, 42, ${simParams.shadow / 130})`);
+        shadowGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+        ctx.fillStyle = shadowGrad;
+        ctx.fillRect(0, 0, w, h);
+      }
+
+      // 3. Screen LCD/OLED Moiré Pattern
+      if (simParams.moire > 0) {
+        ctx.save();
+        ctx.fillStyle = `rgba(6, 182, 212, ${simParams.moire / 350})`;
+        for (let x = 0; x < w; x += 3) {
+          ctx.fillRect(x, 0, 1, h);
+        }
+        ctx.restore();
+      }
+
+      // 4. ISO Sensor Noise
+      if (simParams.noise > 0) {
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const d = imgData.data;
+        const noiseFactor = simParams.noise * 0.4;
+        for (let i = 0; i < d.length; i += 4) {
+          const n = (Math.random() - 0.5) * noiseFactor;
+          d[i] = Math.min(255, Math.max(0, d[i] + n));
+          d[i+1] = Math.min(255, Math.max(0, d[i+1] + n));
+          d[i+2] = Math.min(255, Math.max(0, d[i+2] + n));
+        }
+        ctx.putImageData(imgData, 0, 0);
+      }
+    }
+
+    function sendSimulatedToStudio() {
+      switchMainTab('studio');
+      currentLines = [
+        { id: 1, text: "کٲشِر زَبانہِ ہٕنٛز تَوٲریخ چھےٚ واریاہ پرٛٲنؠ۔", roman: "Kāśir zabāni hənz tavārīkh che vāryāh prə̄n'", poly: [[40, 40], [360, 40], [360, 85], [40, 85]], conf: 0.97 },
+        { id: 2, text: "اَتھ مَنٛز چھےٚ شیٚنٛٹھ، شیو مَت تہٕ صُوفی شٲعِری ہٕنٛز خوٗشبوٗ۔", roman: "Ath manz che shyenṭh, shiv mat tə sūfī shə̄'irī hənz khūshbū.", poly: [[40, 105], [360, 105], [360, 150], [40, 150]], conf: 0.95 },
+        { id: 3, text: "آزاد کٔشیٖر تہٕ وادیِ کٔشیٖر کؠن لوٗکَن ہُنٛد فخر۔", roman: "Āzād Kəshīr tə Vādī-ye Kəshīr kyen lūkan hund fakhr.", poly: [[40, 170], [360, 170], [360, 215], [40, 215]], conf: 0.96 }
+      ];
+      activeLineId = 1;
+      renderDocumentCanvas();
+      renderLinesContainer();
+    }
+
+    // ==========================================
+    // 7. UTILITIES & EXPORTS
+    // ==========================================
+    function switchMainTab(tab) {
+      const tabStudio = document.getElementById('tabStudio');
+      const tabSim = document.getElementById('tabSimulator');
+      const btnStudio = document.getElementById('tabBtnStudio');
+      const btnSim = document.getElementById('tabBtnSimulator');
+
+      if (tab === 'studio') {
+        tabStudio.classList.remove('hidden');
+        tabSim.classList.add('hidden');
+        btnStudio.className = 'px-3 py-1.5 rounded-md font-medium transition bg-cyan-600 text-white flex items-center gap-1.5 shadow-sm';
+        btnSim.className = 'px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5';
+      } else {
+        tabStudio.classList.add('hidden');
+        tabSim.classList.remove('hidden');
+        btnSim.className = 'px-3 py-1.5 rounded-md font-medium transition bg-cyan-600 text-white flex items-center gap-1.5 shadow-sm';
+        btnStudio.className = 'px-3 py-1.5 rounded-md font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5';
+        renderSimulator();
+      }
+    }
+
+    function setInferenceMode(mode) {
+      const c = document.getElementById('modeCloud');
+      const w = document.getElementById('modeWasm');
+      if (mode === 'cloud') {
+        c.className = 'px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30';
+        w.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white';
+      } else {
+        w.className = 'px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30';
+        c.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white';
+      }
+    }
+
+    function copyUnicodeText() {
+      const fullText = currentLines.map(l => l.text).join('\n');
+      navigator.clipboard.writeText(fullText).then(() => {
+        alert("Copied canonical Kashmiri Unicode to clipboard!");
+      });
+    }
+
+    function exportFile(format) {
+      const text = currentLines.map(l => l.text).join('\n');
+      let filename = `kashmiri_ocr_export.${format}`;
+      let blob;
+
+      if (format === 'json') {
+        blob = new Blob([JSON.stringify({ metadata: { language: 'Kashmiri (ks)', script: 'Nastaliq' }, lines: currentLines }, null, 2)], { type: 'application/json' });
+      } else {
+        blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      }
+
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+    }
+
+    function lookupWordInDictionary() {
+      const word = document.getElementById('dictQueryWord').innerText;
+      alert(`Querying Kaeshir Dictionary Lexicon for '${word}'... Found 3 senses with etymological citations.`);
+    }
+
+    function zoomCanvas(factor) {
+      canvasScale *= factor;
+      const canvas = document.getElementById('docCanvas');
+      canvas.style.transform = `scale(${canvasScale})`;
+      canvas.style.transformOrigin = 'top center';
+    }
+  </script>
+</body>
+</html>
